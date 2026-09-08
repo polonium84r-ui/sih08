@@ -1,184 +1,211 @@
-# RailFlow: Smarter Railway Maintenance Block Planning
+# RailFlow: Intelligent Railway Maintenance Block Planning & Optimization
 
-> **Southern Railway (SR) Decision Support System & Smart India Hackathon Prototype**  
-> *Corridor: Southern Railway &bull; Chennai / Salem / Tiruchirappalli / Madurai Divisions (Katpadi Junction &ndash; Jolarpettai Junction)*
+> **Southern Railway (SR) Operational Decision Support System & Smart India Hackathon Prototype**  
+> *Corridor Network: Southern Railway • Chennai, Salem, Tiruchirappalli & Madurai Divisions*
 
 ---
 
 ## 🚂 Executive Overview
 
-**RailFlow** is an intelligent operational decision-support system designed to solve the chronic bottleneck in railway corridor maintenance scheduling across Indian Railways.
+**RailFlow** is an intelligent operational decision-support system designed to resolve maintenance scheduling bottlenecks across Indian Railways.
 
-In traditional railway operations, maintenance planning is fragmented across separate departments:
-1. **Civil Engineering (Track / P-Way):** Plain track tamping & track geometry alignment (CSM 09-32 + BRM), deep ballast screening (BCM RM-80), turnout overhaul (`MT-SR-ENG-104`).
-2. **Signal & Telecommunication (S&T):** Point machine overhaul, electronic interlocking tests, dual axle counter calibration (`MT-SR-SNT-218`).
-3. **Electrical (TRD / OHE):** 25kV catenary tensioning, insulator maintenance, Power Block isolation permit (`MT-SR-TRD-309`).
+Traditional maintenance planning is fragmented across independent departments:
+1. **Civil Engineering (Track / P-Way):** Plain track tamping, track geometry alignment, deep ballast screening, turnout maintenance.
+2. **Signal & Telecommunication (S&T):** Point machine overhaul, electronic interlocking testing, dual axle counter calibration.
+3. **Electrical (TRD / OHE):** 25kV catenary wire tensioning, insulator wash, OHE isolation permits.
 
-Because each department schedules maintenance independently without shared corridor visibility, tracks undergo repeated closures. This causes severe downstream **delay cascades** for passenger and freight trains.
+Because departments submit maintenance requests independently without unified corridor traffic awareness, tracks undergo repeated possessions. This triggers severe downstream **delay cascades** for passenger and freight traffic.
 
-RailFlow integrates corridor network modeling, conflict detection, delay cascade simulation, and explainable AI to recommend coordinated **Mega-Blocks** that bundle multi-department activities into optimal shadow windows.
-
----
-
-## 🎯 Tamil Nadu Network Case Study: Katpadi – Jolarpettai (S-KPD-JTJ)
-
-In the Southern Railway **Katpadi Junction &ndash; Jolarpettai Junction (UP Mainline, KM 129.5 &ndash; 214.0)** corridor:
-
-| Metric | Traditional Manual Planning | RailFlow Coordinated Mega-Block | Net Improvement |
-| :--- | :--- | :--- | :--- |
-| **Total Closures** | **3 Separate Closures** | **1 Coordinated Block** | **-66% closures** |
-| **Total Delay Propagation** | **52 Minutes** | **14 Minutes** | **-73% delay reduction** |
-| **Priority Conflicts** | **2 Conflicts** *(Vande Bharat / Kovai SF)* | **0 Conflicts** *(100% Protected)* | **Zero priority disruption** |
-| **Corridor Punctuality** | **-17.8% drop** | **-1.9% (negligible)** | **+15.9% punctuality retained** |
-| **Inter-Department Efficiency**| **31%** | **95%** | **Seamless co-location** |
+RailFlow introduces a **Single Source of Truth** architecture powered by an **Automatic Block Optimizer**, real-time conflict detection, timetable-aware gap analysis, and corridor isolation.
 
 ---
 
-## 🖥️ Screen-by-Screen Architecture
+## ⚡ Core Workflow: Automatic Block Optimizer
 
-### 1. Operations Console (`Operations` Tab)
-* **Tamil Nadu Railway Network Map (Leaflet / OpenStreetMap):**
-  * Spans the complete authentic Southern Railway network in Tamil Nadu:
-    * **Trunk Line 1:** Chennai Central &rarr; Arakkonam &rarr; Katpadi &rarr; Jolarpettai &rarr; Morappur &rarr; Salem &rarr; Erode &rarr; Tiruppur &rarr; Coimbatore.
-    * **Trunk Line 2:** Chennai Egmore &rarr; Tambaram &rarr; Chengalpattu &rarr; Tindivanam &rarr; Villupuram &rarr; Vriddhachalam &rarr; Tiruchirappalli &rarr; Dindigul &rarr; Madurai &rarr; Virudhunagar &rarr; Tirunelveli &rarr; Kanniyakumari.
-    * **Connecting Lines:** Erode &rarr; Karur &rarr; Trichy, Coimbatore &rarr; Pollachi &rarr; Palani &rarr; Dindigul, Salem &rarr; Vriddhachalam, Katpadi &rarr; Tiruvannamalai &rarr; Villupuram, Madurai &rarr; Rameswaram.
-  * Features the highlighted red dashed proposed block on `Katpadi Junction — Jolarpettai Junction`.
-  * Directional train markers (green/red triangles) representing live trains (Vande Bharat, Kovai SF, Vaigai SF, Pandian SF, MEMUs, and Freight rakes).
-  * Layer control box (`Trains`, `Proposed block`, `Speed restriction`, `Conflicts`).
-  * Bottom-left corridor badge: `Southern Railway (SR) • Chennai / Salem / TPJ / Madurai Divisions`.
-* **Right Telemetry Sidebar:**
-  * Blue callout: *"3 maintenance activities require coordinated planning on Katpadi–Jolarpettai section."*
-  * Status sections: `CORRIDOR STATUS`, `RUNNING TRAINS` (5), `DELAYED TRAINS` (Kovai SF +10 min, Vaigai SF +6 min, BTPN Oil Rake +18 min), `ACTIVE CONFLICTS` (FIFO & Priority override), `UPCOMING MAINTENANCE` (Civil Due, S&T Overdue, TRD Due).
-  * Clicking any delayed train automatically centers and zooms the map onto that train.
+RailFlow eliminates manual, disconnected scheduling steps in favor of a fully automated, continuous optimization workflow:
 
-### 2. Maintenance Block Planner Register (`Block Planner` Tab)
-* **Header:** `Maintenance Block Planner` &bull; `Section: Katpadi–Jolarpettai · 24 Aug 2026 · 3 activities pending`.
-* **Filter Bar:** `Monthly` | `Weekly` (active navy pill) | `Operational`.
-* **Activity Register Table:**
-  * `MT-SR-ENG-104` (Periodic, 2.5h, Due, CSM 09-32 continuous tamping machine + BRM).
-  * `MT-SR-SNT-218` (Defective, 2.0h, Overdue, Point machine overhaul & axle counter test).
-  * `MT-SR-TRD-309` (Preventive, 2.25h, Due, 25kV OHE catenary tensioning).
-  * Green compatibility tags showing all 3 tasks can be safely bundled.
-  * `[View Details]` button opens task details modal with machinery and manpower allocations.
-
-### 3. Candidate Block Windows
-* 3 candidate options:
-  * **Option A (08:30–11:00 IST):** 5 trains affected, 58 delay-mins, 2 priority trains affected, 2 conflicts, overall impact: High.
-  * **Option B (11:30–14:00 IST) [Recommended Coordinated Block]:**
-    * Top green banner: `LOWEST OPERATIONAL IMPACT — RECOMMENDED FOR COORDINATED BLOCK`.
-    * 3 trains affected, 14 delay-mins, None priority affected, 1 conflict, overall impact: Lower.
-  * **Option C (14:30–17:00 IST):**
-    * Badges: `[Temporary Speed Restriction Required]` &amp; `[Not preferred]`.
-    * 4 trains affected, 36 delay-mins, TSR: `Required — last resort`.
-
-### 4. Side-by-Side Comparison & Recommendation
-* 10-row side-by-side comparison matrix with **Option B column shaded light green**.
-* **RailFlow Assessment Callout Box:** Green callout explaining coordinated completion without TSR, and all tags (`[Combined block]`, `[FIFO preserved on C-FIFO-01]`, `[Railway Board list applied on C-BOARD-01]`, `[No Temporary Speed Restriction]`, `[Confidence: HIGH]`, `[Last sync 28s ago]`).
-* Decision buttons: `[Approve Recommendation]`, `[Choose Alternative]`, `[Reject]`, `[View Impact Analysis]`, `[Coordination & History]`.
-
-### 5. Impact Analysis View
-* **Operational Timeline:**
-  * `13:30 IST`: `66023 AJJ-JTJ MEMU path adjusted` (Held +4 min on loop line).
-  * `14:00 IST`: `Block ends` (Section restored. Total estimated delay: 14 min.)
-* **Affected Trains Card:**
-  * `66021 MMC-KPD MEMU`: +5 min delay, +1 downstream.
-  * `66023 AJJ-JTJ MEMU`: +4 min delay, +1 downstream.
-  * `BTPN Oil Tanker Rake`: +5 min delay.
-* **Related Conflicts Card:**
-  * `[FIFO]` `66021 MMC-KPD MEMU vs 66023 AJJ-JTJ MEMU` with `[View Conflict]` modal.
-* **Mini Map & Summary:** Leaflet map zoomed in on Katpadi &ndash; Jolarpettai with Option B summary card.
-
-### 6. Confirm Block Approval Modal
-* Advisory disclaimer modal:
-  *"This records your planning decision in the RailFlow decision log. RailFlow is advisory — it does not set signals, book official blocks, or write to the Control Office Application."*
-* Approving summary: Block W-B (11:30–14:00 IST), Tasks `MT-SR-ENG-104`, `MT-SR-SNT-218`, `MT-SR-TRD-309`, Impact: 3 trains, 14 estimated delay-minutes.
-
-### 7. Coordination & Decision History Dashboard (`Coordination` Tab)
-* Top-right green status pill: `Block approved · 11:30–14:00`.
-* **4 Metric KPI Cards:**
-  1. `Maintenance Tasks`: **3** (`on section today`).
-  2. `Blocks Planned / Combined`: **1 / 1** (`11:30–14:00 IST`).
-  3. `Controller Decisions`: **1** (`1 accepted · 0 modified · 0 rejected`).
-  4. `Approved Block Impact`: **14 min** (`estimated delay`).
-* **Decision History Table:** Timestamp, tasks, candidates, recommended (`W-B`), reason, controller decision (`Approved`), status (`Approved — advisory record logged`), and `[View Details]` button which opens the official printable Indian Railways Block Sanction Memo for Southern Railway.
-
-### 8. System & Rule Configuration (`Configuration` Tab)
-* Operational parameters (Maximum Line Speed, Minimum Headway, Caution Order Speed, Departmental Prioritisation) and safety rule configuration with audit logging.
-
----
-
-## 🚀 How to Run Locally
-
-### Option 1: Using Node.js
-```bash
-npm start
-# Server starts at http://localhost:3000
+```
+Submit Block Requisition
+        ↓
+Block Optimizer runs automatically
+        ↓
+Check requested Preferred Maintenance Window
+        ↓
+If feasible   → select best continuous block inside preferred window
+If not feasible → analyze conflicts → search alternative windows
+        ↓
+Rank feasible alternatives (Safety → Full Duration → Min Deviation → Earliest Slot)
+        ↓
+Automatically assign/schedule the optimized slot
+        ↓
+Synchronize Single Source of Truth Across All Views:
+┌─────────────────────────────────────────────────────────────┐
+│ Active Requisitions • Leaflet Map • Operations Dashboard    │
+│ Block Planner Register • Coordination Log • Timetable Card  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Option 2: Using Python
-```bash
-python -m http.server 8080 --directory d:\clone
-# Open http://localhost:8080
-```
-
-### Option 3: Direct Browser Launch
-Double-click or open [d:/clone/index.html](file:///d:/clone/index.html) in any modern browser (Chrome, Edge, Firefox).
+- **Feasible Slot:** Status is assigned as `SCHEDULED (OPTIMIZED)` with the exact continuous time window.
+- **Infeasible Slot:** Status is set to `UNSCHEDULED (NO FEASIBLE BLOCK)` with clear train conflict explanations.
+- **No Manual Step:** No manual "Schedule Work Slot" button is required for newly submitted requisitions.
 
 ---
 
-## 🛰️ Real-Time RailRadar Integration & Architecture
+## 🗺️ Key System Capabilities
 
-RailFlow integrates live railway telemetry from **RailRadar** (`https://api.railradar.in/v1`) using a secure backend service layer:
+### 1. Operations Console & Live Map
+* **Southern Railway Network (Leaflet / OpenStreetMap):**
+  * Spans key trunk lines and junctions across Tamil Nadu:
+    * **Trunk Line 1:** Chennai Central ↔ Arakkonam ↔ Katpadi ↔ Jolarpettai ↔ Salem ↔ Erode ↔ Tiruppur ↔ Coimbatore.
+    * **Trunk Line 2:** Chennai Egmore ↔ Tambaram ↔ Chengalpattu ↔ Villupuram ↔ Vriddhachalam ↔ Tiruchirappalli ↔ Dindigul ↔ Madurai.
+    * **Chord & Branch Lines:** Erode ↔ Karur ↔ Trichy, Coimbatore ↔ Palani ↔ Dindigul, Salem ↔ Vriddhachalam.
+* **Interactive Worksite Markers & Popups:**
+  * Displays active requisitions with exact coordinates, corridor, track line, block type, duration, and scheduled window.
+* **Corridor-Synchronized Telemetry Sidebar:**
+  * Shows running trains, active conflicts, upcoming maintenance, and honest data attribution.
 
-1. **Trains Between Stations API (`GET /v1/trains/between/{from}/{to}`)**:
-   - Dynamically discovers active trains traversing the selected corridor (e.g. Katpadi `KPD` &rarr; Jolarpettai `JTJ`).
-   - No hardcoded train numbers.
-2. **Train Schedule & Timetable API (`GET /v1/trains/{number}`)**:
-   - Retrieves full station timetable, halts, and scheduled corridor traversal.
-3. **Live Train Running Status API (`GET /v1/trains/{number}/live`)**:
-   - Retrieves real-time delay minutes and current GPS/station location.
-4. **Worksite Passage Time Calculation**:
-   - Estimates entry and exit times of each train through the specific maintenance worksite KM range (e.g. KM 150.20 – 153.50).
-5. **Configurable Operational & Safety Rules**:
-   - **UP Line Block**: Evaluates UP-line conflicts.
-   - **Adjacent DOWN Line**: Flagged as *"Subject to operational/safety restrictions"*.
-   - **25kV Traction Power Block**: Dynamically required only when the selected activity requires OHE isolation (TRD catenary/tower wagon), not for plain track tamping.
-6. **Block Recommendation Engine**:
-   - Status: `"RECOMMENDED – PENDING CONTROLLER APPROVAL"` (advisory only; block authorization remains strictly with Chief Section Controller).
-   - Searches for continuous block within the preferred window first. If conflicts occur, automatically finds and recommends the next best feasible window with complete conflict explanation.
+### 2. Block Planner & Dynamic Activity Register
+* **Dynamic Requisition Dataset:** Dynamically populates maintenance activities from the active requisition dataset, replacing static hard-coded activities.
+* **Corridor Isolation Filters:** Switch between *Active Corridor* (showing only activities on the current section) and *All Corridors*.
+* **Evaluated Candidate Cards & Comparison Matrix:** Renders ranked candidate windows with duration, deviation, and impact scores.
+* **Impact Analysis:** Visualizes conflicting train passages, passage times through worksite KM boundaries, delays, and downstream effects.
 
-### Environment Configuration:
-Create a `.env` file in the root directory (optional):
+### 3. Coordination & Decision History Log
+* **Unified Decision History Table:**
+  * Tracks submission timestamp, REQ ID, department, corridor/section, requested window, duration, optimizer-selected window, conflicts considered, decision status, and data source.
+* **4 Operational KPI Cards:**
+  * *Active Maintenance Tasks*, *Auto-Scheduled Blocks*, *Optimizer Decisions Logged*, and *Corridor Telemetry Source*.
+* **Statutory Authority Notice:**
+  * Explicitly communicates that RailFlow is an automated decision-support prototype. Final statutory authority remains with authorised railway operating personnel.
+
+### 4. Operating Branch / Coordinated Work Timetable
+* **Single Source of Truth Timetable Card:**
+  * Displays Section & Line, approved maintenance window, and permit order number matching the active optimizer recommendation.
+* **Bundled Departmental Timetable:**
+  * Bundles compatible departmental activities located on the same corridor section and track line.
+  * When no compatible activities exist, shows: *"No compatible departmental activities available for bundling."*
+
+### 5. Prototype Operational Configuration
+* **Configurable Parameters:**
+  * **Sectional Maximum Speed** (e.g. 130 km/h)
+  * **Minimum Safety Headway Margin** (e.g. 12 min — parameterizes train clearance buffers with an enforced minimum bound of 3 minutes)
+  * **Adjacent Line Caution Speed** (e.g. 30 km/h Caution Order applied to opposite line)
+* **Conditional Safety Logic:**
+  * **25kV Traction Power Block:** Conditional upon electrical OHE equipment involvement (catenary wire, tower wagon). Civil track work never forces an unnecessary Power Block.
+  * Configuration values cannot bypass conflict detection or safety constraints.
+
+### 6. Honest Live vs Demo/Mock Data Reporting
+* **Live Telemetry Active:**
+  * `"LIVE DATA • RailRadar Real-Time API"`
+* **Fallback Mode (Quota / Rate-Limit / Offline):**
+  * `"LIVE DATA UNAVAILABLE • DEMO/MOCK DATA"`
+  * Uses honest reasoning: *"Feasible continuous block identified using available timetable/demo data."* Never falsely claims live train disruption verification when running on mock data.
+
+---
+
+## 🚀 Getting Started Locally
+
+### Prerequisites
+* Node.js (v18+ recommended)
+* npm
+
+### Installation & Launch
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/polonium84r-ui/sih08.git
+   cd sih08
+   ```
+
+2. **Install dependencies (if any):**
+   ```bash
+   npm install
+   ```
+
+3. **Start the RailFlow Server:**
+   ```bash
+   npm start
+   ```
+   *Access the web application at:* `http://localhost:3000`
+
+### Optional Environment Variables (`.env`)
 ```env
-RAILRADAR_API_KEY=your_railradar_api_token_here
 PORT=3000
+RAILRADAR_API_KEY=your_railradar_api_token_here
 ```
-*(If no API key is set, the system gracefully falls back to `"Demo/Mock Data"` with clear UI indicators).*
+*(If no API key is provided, RailFlow automatically operates in Demo/Mock Mode using verified corridor timetables).*
 
 ---
 
-## 📁 Project Structure
+## 🧪 Verification & Automated Test Suites
+
+RailFlow includes comprehensive automated verification suites in `scratch/` covering 77 automated test assertions:
+
+```bash
+# Run the Unified Workflow Verification Suite (Tests 1–14)
+node scratch/verify_unified_workflow.js
+
+# Run the Block Optimizer Verification Suite
+node scratch/verify_block_optimizer.js
+
+# Run the State Synchronization & Corridor Isolation Suite
+node scratch/verify_corridor_sync.js
+
+# Run the Operating Branch Timetable Suite
+node scratch/verify_operating_branch.js
+
+# Run the Railway Operational Scenarios Suite
+node scratch/verify_scenarios.js
+```
+
+### Test Coverage Summary:
+| Test Suite | Purpose | Tests | Status |
+| :--- | :--- | :---: | :---: |
+| `verify_unified_workflow.js` | End-to-end Submit → Optimize → Auto-Schedule cross-page sync | 14 | ✅ PASSED |
+| `verify_block_optimizer.js` | Feasibility ranking, alternatives, line/block pairing, KM validation | 13 | ✅ PASSED |
+| `verify_corridor_sync.js` | Track line sync, corridor isolation (CBE–ED vs KPD–JTJ), live/demo honesty | 28 | ✅ PASSED |
+| `verify_operating_branch.js`| Coordinated timetable card, bundled activity filtering | 14 | ✅ PASSED |
+| `verify_scenarios.js` | 8 railway operational scenarios (OHE Power Block, caution orders, rate limits) | 8 | ✅ PASSED |
+| **Total Automated Tests** | | **77** | **100% PASS** |
+
+---
+
+## 📁 Repository Structure
 
 ```
-d:/clone/
-├── index.html               # Main Command Center interface (4 Enterprise Tabs)
-├── package.json             # NPM package specification & start script
-├── server.js                # Node.js HTTP server integrating RailRadar REST endpoints
-├── README.md                # Documentation & Southern Railway corridor mapping
+.
+├── index.html                           # Single-page interface (Operations, Block Planner, Coordination, Config)
+├── server.js                            # Node.js backend server with REST endpoints
+├── package.json                         # Project dependencies and npm start script
+├── README.md                            # Comprehensive project documentation
 ├── css/
-│   ├── main.css             # Enterprise light-slate railway theme tokens & Operations layout
-│   └── components.css       # Register, candidate cards, comparison table, modals & KPI cards
+│   ├── main.css                         # Core styling, tokens, and layout
+│   └── components.css                   # Component styles (tables, KPI cards, badges, modal dialogs)
 ├── js/
-│   ├── app.js               # Coordinator, Leaflet maps, live KM validation & block planning UI
-│   ├── corridor_data.js     # Tamil Nadu network stations, coordinates, timetables & tasks
-│   ├── conflict_engine.js   # Spatial, temporal, adjacent line & power interlocks
-│   ├── cascade_simulator.js # Delay cascade propagation physics & headway domino engine
-│   ├── recommender.js       # Multi-candidate window generation & explainable scoring
-│   └── audit_logger.js      # Official Block Sanction Order generator & audit logger
-└── server/
-    └── services/
-        ├── railRadarService.js        # HTTPS client for https://api.railradar.in/v1 with Bearer auth & rate-limit handling
-        ├── trainDataService.js        # Corridor train discovery, timetable, live telemetry & worksite KM validation
-        ├── conflictDetectionService.js# Configurable safety rules, UP/DOWN line isolation & OHE checks
-        └── blockOptimizationService.js # Proximity-based continuous block search & recommendation engine
+│   ├── app.js                           # Frontend controller, Leaflet maps, auto-schedule dispatch
+│   ├── corridor_data.js                 # Network stations, track topology, reference timetables & requisitions
+│   ├── conflict_engine.js               # Client-side spatial, temporal, and electrical conflict checks
+│   ├── cascade_simulator.js             # Delay cascade simulation model
+│   ├── recommender.js                   # Client recommendation candidate generator
+│   └── audit_logger.js                  # Audit logging system
+├── server/
+│   └── services/
+│       ├── railRadarService.js          # RailRadar API client with error & rate-limit handling
+│       ├── trainDataService.js          # Corridor train schedule discovery, worksite KM range validation
+│       ├── conflictDetectionService.js  # Train conflict detection, safety buffers, configurable caution orders
+│       └── blockOptimizationService.js # 24h continuous block search, deterministic ranking & alternative slots
+└── scratch/
+    ├── verify_unified_workflow.js       # 14-point end-to-end unified workflow verification test
+    ├── verify_block_optimizer.js        # Block Optimizer core logic test suite
+    ├── verify_corridor_sync.js          # Cross-corridor state isolation and line/block validation suite
+    ├── verify_operating_branch.js       # Operating Branch Timetable card synchronization suite
+    └── verify_scenarios.js              # 8 core railway operational scenarios suite
 ```
+
+---
+
+## ⚖️ Disclaimer & Advisory Protocol
+
+RailFlow is an **automated decision-support prototype**. In compliance with Indian Railways General and Subsidiary Rules (G&SR):
+- Maintenance blocks proposed by RailFlow represent advisory decision-support recommendations.
+- Final authority for block possession, line blocking, and traffic diversion remains exclusively with authorised railway operating personnel (Chief Section Controller / Section Controller via the Control Office Application — COA).

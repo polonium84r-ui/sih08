@@ -14,11 +14,19 @@ class ConflictDetectionService {
    * @param {string} blockType 'UP Line Block' | 'DOWN Line Block' | 'Both Lines Block'
    * @param {string} activityName
    * @param {string} machinery
+   * @param {Object} config Configurable operational parameters (headway, caution speed)
    */
-  evaluateWindowConflicts(startMins, endMins, trains, requestedLine, blockType, activityName = '', machinery = '') {
+  evaluateWindowConflicts(startMins, endMins, trains, requestedLine, blockType, activityName = '', machinery = '', config = {}) {
     const isUpRequested = (blockType && blockType.includes('UP')) || (requestedLine && requestedLine.includes('UP'));
     const isDownRequested = (blockType && blockType.includes('DOWN')) || (requestedLine && requestedLine.includes('DOWN'));
     const isBothRequested = (blockType && blockType.includes('Both')) || (requestedLine && requestedLine.includes('Both'));
+
+    // Configurable Safety Headway: safety buffer before train entry and after exit
+    // Default 10–12 min headway translates to 5 min clearance buffer. Minimum buffer is 3 min (safety bound).
+    const configuredHeadway = (config && (config.headwayMinutes || config.headwayMarginMin))
+      ? Number(config.headwayMinutes || config.headwayMarginMin)
+      : 10;
+    const clearanceBuffer = Math.max(3, Math.round(configuredHeadway / 2));
 
     const directConflicts = [];
     const adjacentLineTrains = [];
@@ -27,10 +35,9 @@ class ConflictDetectionService {
       const p = train.passageTime;
       if (!p || p.entryTimeMins === null || p.exitTimeMins === null) return;
 
-      // Check temporal overlap with [startMins, endMins]
-      // Buffer of 5 minutes before entry and after exit for signal clearance
-      const trainStart = Math.max(0, p.entryTimeMins - 5);
-      const trainEnd = Math.min(1440, p.exitTimeMins + 5);
+      // Check temporal overlap with [startMins, endMins] with safety headway clearance buffer
+      const trainStart = Math.max(0, p.entryTimeMins - clearanceBuffer);
+      const trainEnd = Math.min(1440, p.exitTimeMins + clearanceBuffer);
 
       const overlaps = Math.max(startMins, trainStart) < Math.min(endMins, trainEnd);
       if (!overlaps) return;
@@ -55,12 +62,16 @@ class ConflictDetectionService {
       }
     });
 
-    // Configurable Safety Rules
+    // Configurable Adjacent Line Caution Speed (default 30 km/h)
+    const configuredCautionSpeed = (config && (config.cautionSpeedKmH || config.adjacentLineCautionSpeed))
+      ? Number(config.cautionSpeedKmH || config.adjacentLineCautionSpeed)
+      : 30;
+
     const adjacentRestrictions = isBothRequested
       ? 'Both lines blocked under mega-block possession.'
       : (adjacentLineTrains.length > 0
-          ? 'Adjacent line subject to operational and safety restrictions.'
-          : 'Adjacent line operational under standard caution watch.');
+          ? `Adjacent line subject to operational and safety restrictions (${configuredCautionSpeed} km/h Caution Order).`
+          : `Adjacent line operational under standard caution watch (${configuredCautionSpeed} km/h Caution Order).`);
 
     // Configurable Power Block Rule:
     // Only required when the activity specifically involves 25kV OHE electrical isolation
@@ -82,8 +93,8 @@ class ConflictDetectionService {
         }
       : {
           required: false,
-          label: 'No Power Block Required',
-          detail: 'Worksite operates within standard electrical overhead safety clearance envelope.'
+          label: 'No automatic Power Block requirement identified for this activity; final OHE isolation requirement is subject to worksite conditions and authorised railway procedures.',
+          detail: 'Subject to worksite conditions and authorised railway procedures.'
         };
 
     return {

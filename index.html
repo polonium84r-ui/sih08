@@ -165,7 +165,7 @@
               <span class="badge-pill pill-priority" style="font-size: 0.7rem; font-weight: 700;">FORM IR-OP-41</span>
             </div>
 
-            <form id="blockRequisitionForm" style="padding: 1.25rem;">
+            <form id="blockRequisitionForm" onsubmit="return false;" style="padding: 1.25rem;">
               
               <!-- 1. Department Selection Cards -->
               <div class="form-group-block">
@@ -285,6 +285,7 @@
                     <option value="UP Line Block" selected>UP Line Block</option>
                     <option value="DOWN Line Block">DOWN Line Block</option>
                     <option value="Both Lines Block (Simultaneous)">Both Lines Block (Simultaneous)</option>
+                    <option value="Station Loop / Yard Track Block">Station Loop / Yard Track Block</option>
                   </select>
                 </div>
               </div>
@@ -434,6 +435,17 @@
                   </div>
                 </div>
 
+                <!-- Other Feasible Options (Block Optimizer Top Alternatives) -->
+                <div id="bpAlternativesContainer" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.45rem;">
+                    <span style="font-size: 0.72rem; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: 0.03em;">⚡ Other Feasible Options (Ranked Alternatives)</span>
+                    <span style="font-size: 0.68rem; color: #64748b;">Deterministic Ranking</span>
+                  </div>
+                  <div id="bpAlternativesList" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                    <!-- Rendered dynamically via JS -->
+                  </div>
+                </div>
+
                 <!-- Reason & Conflict Analysis Callout -->
                 <div id="bpReasonBanner" style="background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #3b82f6; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.78rem; line-height: 1.45; color: #1e40af;">
                   ℹ️ <strong>Status:</strong> <span id="bpReasonText">Enter a valid Worksite KM Range to evaluate block availability.</span>
@@ -463,27 +475,6 @@
                   </div>
                 </div>
 
-                <!-- Configurable Safety Rules Display -->
-                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.65rem 0.85rem; margin-bottom: 1rem; font-size: 0.75rem;">
-                  <div style="font-weight: 700; color: #334155; margin-bottom: 0.35rem; text-transform: uppercase; font-size: 0.7rem;">Configured Operational &amp; Safety Controls:</div>
-                  <div id="bpPowerBlockText" style="margin-bottom: 0.25rem;">⚡ <strong>25kV Traction Power Block:</strong> Requires evaluation against work activity.</div>
-                  <div id="bpAdjacentLineText">⚠️ <strong>Adjacent Track:</strong> Requires evaluation against corridor safety rules.</div>
-                </div>
-
-                <!-- Controller Actions -->
-                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; padding-top: 0.5rem;">
-                  <div style="font-size: 0.7rem; color: #64748b; font-style: italic;">
-                    Decision-support simulation only &bull; Statutory block booking requires Operating Branch authority via COA
-                  </div>
-                  <div style="display: flex; gap: 0.5rem;">
-                    <button type="button" class="rf-btn rf-btn-outline" id="btnBpViewMap" style="padding: 0.35rem 0.75rem; font-size: 0.76rem;">
-                      📍 View Worksite on Map
-                    </button>
-                    <button type="button" class="rf-btn rf-btn-green" id="btnBpSanction" style="padding: 0.35rem 0.85rem; font-size: 0.76rem; font-weight: 700;" disabled>
-                      ✍️ Simulated Controller Approval (Prototype Demo)
-                    </button>
-                  </div>
-                </div>
 
               </div>
             </div>
@@ -550,25 +541,21 @@
     </div>
 
     <!-- TAB 3: Block Planner View (Screenshots 2, 3, 4, 5, and Impact Analysis) -->
-    <div class="rf-tab-view" id="tabBlockPlanner">
-      <div class="planner-page-container">
-
-        <!-- SUBVIEW A: Maintenance Activity Register (Screenshot 2) -->
+    <div class="rf-t        <!-- SUBVIEW A: Maintenance Activity Register (Screenshot 2) -->
         <div id="subviewRegister" style="display: none;">
           <div class="page-header-block">
             <h2 class="page-main-title">Maintenance Block Planner</h2>
-            <div class="page-sub-title">Section: Katpadi&ndash;Jolarpettai &bull; 24 Aug 2026 &bull; 3 activities pending &bull; Engineering, S&amp;T, Traction</div>
+            <div class="page-sub-title" id="bpSectionSubtitle">Section: Active Planning Corridor &bull; Dynamic Requisition Synchronization</div>
           </div>
 
-          <div class="blue-callout-banner">
-            Three departments require maintenance on the same section. All activities are compatible &mdash; one coordinated block can replace three separate corridor closures.
+          <div class="blue-callout-banner" id="bpCalloutBanner">
+            Departmental maintenance activities active on this corridor section. Coordinated planning synchronizes schedules directly with the automatic Block Optimizer.
           </div>
 
           <div class="filter-action-bar">
             <div class="filter-toggle-group">
-              <button class="filter-toggle-btn">Monthly</button>
-              <button class="filter-toggle-btn active">Weekly</button>
-              <button class="filter-toggle-btn">Operational</button>
+              <button class="filter-toggle-btn active" id="btnFilterActiveCorridor">Active Corridor</button>
+              <button class="filter-toggle-btn" id="btnFilterAllCorridors">All Corridors</button>
             </div>
 
             <div class="action-btn-group">
@@ -579,20 +566,24 @@
 
           <!-- Activity Register Table -->
           <div class="table-card">
-            <div class="table-title-header">Maintenance Activity Register</div>
+            <div class="table-title-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>Maintenance Activity Register</span>
+              <span id="bpRegisterCountBadge" style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">Single Source of Truth</span>
+            </div>
             <table class="register-table">
               <thead>
                 <tr>
                   <th style="width: 40px;"><input type="checkbox" checked disabled></th>
-                  <th>TASK ID</th>
+                  <th>REQUISITION ID</th>
                   <th>DEPARTMENT</th>
-                  <th>SECTION / LOCATION</th>
+                  <th>CORRIDOR / SECTION</th>
+                  <th>WORKSITE</th>
                   <th>WORK TYPE</th>
                   <th>DURATION</th>
                   <th>URGENCY</th>
                   <th>COMPATIBILITY</th>
-                  <th>PLANNING STATUS (WEEKLY)</th>
-                  <th>BLOCK REQ.</th>
+                  <th>PLANNING STATUS</th>
+                  <th>ASSIGNED WORK SLOT</th>
                   <th>ACTION</th>
                 </tr>
               </thead>
@@ -601,7 +592,7 @@
           </div>
 
           <div class="table-footer-note">
-            Compatibility verified by section controller. No department is ranked above another. If booked separately, the corridor would close three times &mdash; coordinated planning reduces disruption.
+            Compatibility verified by section controller. Single source of truth: schedules are assigned automatically by the Block Optimizer upon requisition evaluation.
           </div>
         </div>
 
@@ -609,7 +600,7 @@
         <div id="subviewCandidates">
           <div class="page-header-block">
             <h2 class="page-main-title">Candidate Block Windows</h2>
-            <div class="page-sub-title">Three candidate windows scored for train impact on the Katpadi&ndash;Jolarpettai section &bull; 24 Aug 2026</div>
+            <div class="page-sub-title" id="bpCandidatesSubtitle">Ranked candidate continuous block windows evaluated by Block Optimizer</div>
           </div>
 
           <div class="action-btn-group" style="margin-bottom: 1.5rem;">
@@ -624,109 +615,46 @@
         <div id="subviewComparison" style="display: none;">
           <div class="page-header-block">
             <h2 class="page-main-title">Block Window Comparison &amp; Recommendation</h2>
-            <div class="page-sub-title">Side-by-side comparison of all three candidate windows &bull; Katpadi&ndash;Jolarpettai &bull; 24 Aug 2026</div>
+            <div class="page-sub-title" id="bpComparisonSubtitle">Side-by-side comparison of candidate windows scored for train impact</div>
           </div>
 
-          <!-- Comparison Table Matrix -->
-          <table class="comparison-matrix-table">
-            <thead>
-              <tr>
-                <th>CRITERION</th>
-                <th>OPTION A</th>
-                <th class="col-rec">
-                  OPTION B 
-                  <span class="rec-badge-table">RECOMMENDED</span>
-                </th>
-                <th>OPTION C</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="matrix-row-title">Window (IST)</td>
-                <td>08:30–11:00</td>
-                <td class="col-rec">11:30–14:00</td>
-                <td>14:30–17:00</td>
-              </tr>
-              <tr>
-                <td class="matrix-row-title">Maintenance completion</td>
-                <td>Feasible</td>
-                <td class="col-rec">Feasible</td>
-                <td>Feasible</td>
-              </tr>
-              <tr>
-                <td class="matrix-row-title">Trains affected</td>
-                <td>5</td>
-                <td class="col-rec">3</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td class="matrix-row-title">Est. delay-minutes</td>
-                <td>64</td>
-                <td class="col-rec">18</td>
-                <td>40</td>
-              </tr>
-              <tr>
-                <td class="matrix-row-title">Priority trains affected</td>
-                <td>2</td>
-                <td class="col-rec">None</td>
-                <td>1</td>
-              </tr>
-              <tr>
-                <td class="matrix-row-title">Conflicts</td>
-                <td>2</td>
-                <td class="col-rec">1</td>
-                <td>1</td>
-              </tr>
-              <tr>
-                <td class="matrix-row-title">Temporary Speed Restriction</td>
-                <td>Not required</td>
-                <td class="col-rec">Not required</td>
-                <td>Required &mdash; last resort</td>
-              </tr>
-              <tr>
-                <td class="matrix-row-title">Combined activities</td>
-                <td>3 departments</td>
-                <td class="col-rec">3 departments</td>
-                <td>3 departments</td>
-              </tr>
-              <tr>
-                <td class="matrix-row-title">Overall impact</td>
-                <td>High</td>
-                <td class="col-rec">Lower</td>
-                <td>High complexity</td>
-              </tr>
-              <tr>
-                <td class="matrix-row-title">Status</td>
-                <td>&mdash;</td>
-                <td class="col-rec">Recommended</td>
-                <td>Not preferred</td>
-              </tr>
-            </tbody>
-          </table>
+          <div id="dynamicComparisonContainer">
+            <!-- Comparison Table Matrix -->
+            <table class="comparison-matrix-table" id="comparisonMatrixTable">
+              <thead>
+                <tr>
+                  <th>CRITERION</th>
+                  <th class="col-rec">
+                    PRIMARY WINDOW 
+                    <span class="rec-badge-table">RECOMMENDED</span>
+                  </th>
+                  <th>ALTERNATIVE #1</th>
+                  <th>ALTERNATIVE #2</th>
+                </tr>
+              </thead>
+              <tbody id="comparisonMatrixTbody"></tbody>
+            </table>
 
-          <!-- RailFlow Assessment Callout Box -->
-          <div class="assessment-callout-box">
-            <h3 class="assessment-title">RailFlow Assessment: Option B (W-B, 11:30–14:00)</h3>
-            <p class="assessment-body">
-              Recommended because it completes the required Engineering, S&amp;T and Traction work on Katpadi&ndash;Jolarpettai in one coordinated block, avoids 20643 Vande Bharat and 12675 Kovai Express peak paths, does not require a Temporary Speed Restriction, and produces the lowest estimated train-delay impact (18 min). Track, signalling and traction departments are compatible for this section &mdash; no department is ranked above another.
-            </p>
-            <div class="assessment-tags-row">
-              <span class="assessment-tag">Combined block</span>
-              <span class="assessment-tag">FIFO preserved on C-FIFO-01</span>
-              <span class="assessment-tag">Railway Board list applied on C-BOARD-01</span>
-              <span class="assessment-tag">No Temporary Speed Restriction</span>
-              <span class="assessment-tag">Confidence: HIGH</span>
-              <span class="assessment-tag" style="color: #64748b;">Last sync 28s ago</span>
+            <!-- RailFlow Assessment Callout Box -->
+            <div class="assessment-callout-box" id="bpAssessmentCalloutBox">
+              <h3 class="assessment-title" id="bpAssessmentTitle">RailFlow Assessment</h3>
+              <p class="assessment-body" id="bpAssessmentBody">
+                Evaluating candidate windows...
+              </p>
+              <div class="assessment-tags-row" id="bpAssessmentTags">
+                <span class="assessment-tag">Automated Schedule</span>
+                <span class="assessment-tag">FIFO preserved on C-FIFO-01</span>
+                <span class="assessment-tag">Railway Board list applied on C-BOARD-01</span>
+              </div>
             </div>
           </div>
 
           <!-- Final Decision Actions Bar -->
           <div class="decision-actions-bar">
             <button class="rf-btn rf-btn-green" id="btnApproveRec" style="padding: 0.65rem 1.5rem; font-size: 0.9rem;">
-              Approve Recommendation
+              View Assigned Schedule
             </button>
-            <button class="rf-btn rf-btn-navy" id="btnChooseAlt">Choose Alternative</button>
-            <button class="rf-btn rf-btn-red" id="btnRejectRec">Reject</button>
+            <button class="rf-btn rf-btn-navy" id="btnChooseAlt">Candidate Windows</button>
             <button class="rf-btn rf-btn-outline" id="btnViewImpactAnalysis">View Impact Analysis</button>
             <button class="rf-btn rf-btn-outline" id="btnCoordinationHistory">Coordination &amp; History</button>
           </div>
@@ -735,94 +663,42 @@
         <!-- SUBVIEW D: Impact Analysis View (Screenshot 1 of 2nd batch) -->
         <div id="subviewImpactAnalysis" style="display: none;">
           <div class="page-header-block">
-            <h2 class="page-main-title">Impact Analysis &mdash; Option B (11:30&ndash;14:00 IST)</h2>
-            <div class="page-sub-title">Estimated train regulation, downstream cascade, and conflict resolution &bull; Katpadi&ndash;Jolarpettai</div>
+            <h2 class="page-main-title" id="bpImpactTitle">Impact Analysis &mdash; Assigned Block</h2>
+            <div class="page-sub-title" id="bpImpactSubtitle">Estimated train regulation, downstream cascade, and conflict resolution</div>
           </div>
 
           <div class="action-btn-group" style="margin-bottom: 1rem;">
             <button class="rf-btn rf-btn-outline" id="btnBackToComparisonFromImpact">&larr; Back to Comparison</button>
-            <button class="rf-btn rf-btn-green" id="btnApproveFromImpact">Approve Recommendation</button>
+            <button class="rf-btn rf-btn-navy" id="btnBackToRegisterFromImpact">Back to Activity Register</button>
           </div>
 
           <div class="impact-layout-grid">
             <!-- Left: Timeline & Affected Trains & Conflicts -->
             <div>
               <!-- Timeline Card -->
-              <div class="timeline-card">
+              <div class="timeline-card" id="bpImpactTimelineCard">
                 <div class="timeline-event-row">
                   <div class="timeline-dot"></div>
                   <div>
-                    <div class="timeline-event-time">13:30 IST</div>
-                    <div class="timeline-event-title">BTPN Petroleum path adjusted</div>
-                    <div class="timeline-event-desc">Freight +4 min at crossing.</div>
+                    <div class="timeline-event-time" id="bpTimelineStartTime">11:00 IST</div>
+                    <div class="timeline-event-title">Block possession commences</div>
+                    <div class="timeline-event-desc">Section isolated for authorized maintenance stretch.</div>
                   </div>
                 </div>
                 <div class="timeline-event-row">
                   <div class="timeline-dot end-dot"></div>
                   <div>
-                    <div class="timeline-event-time">14:00 IST</div>
-                    <div class="timeline-event-title">Block ends</div>
-                    <div class="timeline-event-desc">Section restored. Total estimated delay: 18 min.</div>
+                    <div class="timeline-event-time" id="bpTimelineEndTime">12:30 IST</div>
+                    <div class="timeline-event-title">Block terminates &amp; track restored</div>
+                    <div class="timeline-event-desc">Normal train operations resume under standard signaling.</div>
                   </div>
                 </div>
               </div>
 
               <!-- Affected Trains Card -->
               <div class="impact-card">
-                <div class="impact-card-header">Affected Trains</div>
-                
-                <div class="impact-item-row">
-                  <div>
-                    <div>
-                      <span class="impact-train-title">66021 KPD-JTJ MEMU Passenger</span>
-                      <span class="impact-train-code">TR-PSG-01</span>
-                    </div>
-                    <div class="impact-train-desc">Passenger rescheduled around midday block. Minor delay.</div>
-                  </div>
-                  <div class="impact-badges-col">
-                    <span class="badge-delay-pink">+6 min</span>
-                    <span class="badge-downstream-yellow">+2 downstream</span>
-                  </div>
-                </div>
-
-                <div class="impact-item-row">
-                  <div>
-                    <div>
-                      <span class="impact-train-title">66022 JTJ-KPD MEMU Passenger</span>
-                      <span class="impact-train-code">TR-PSG-02</span>
-                    </div>
-                    <div class="impact-train-desc">Second passenger slight cascade from PSG-01 delay.</div>
-                  </div>
-                  <div class="impact-badges-col">
-                    <span class="badge-delay-pink">+4 min</span>
-                    <span class="badge-downstream-yellow">+2 downstream</span>
-                  </div>
-                </div>
-
-                <div class="impact-item-row">
-                  <div>
-                    <div>
-                      <span class="impact-train-title">BTPN Petroleum Rake Ennore-CBE</span>
-                      <span class="impact-train-code">TR-FRT-01</span>
-                    </div>
-                    <div class="impact-train-desc">Freight path adjusted. Minimal impact.</div>
-                  </div>
-                  <div class="impact-badges-col">
-                    <span class="badge-delay-pink">+4 min</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Related Conflicts Card -->
-              <div class="impact-card">
-                <div class="impact-card-header">Related Conflicts</div>
-                <div class="impact-item-row">
-                  <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span class="badge-fifo">FIFO</span>
-                    <span style="font-size: 0.82rem; font-weight: 500;">66021 KPD-JTJ MEMU vs 66023 KPD-SA Passenger</span>
-                  </div>
-                  <button class="rf-btn rf-btn-outline" style="padding: 0.25rem 0.65rem; font-size: 0.75rem;">View Conflict</button>
-                </div>
+                <div class="impact-card-header">Corridor Train Telemetry &amp; Conflicts</div>
+                <div id="bpImpactTrainsList"></div>
               </div>
             </div>
 
@@ -831,26 +707,26 @@
               <div class="mini-map-box" id="impactMiniMapContainer"></div>
 
               <div class="summary-details-card">
-                <div class="summary-title">Option B Summary</div>
+                <div class="summary-title" id="bpImpactSummaryTitle">Assigned Block Summary</div>
                 <div class="summary-detail-row">
                   <span>Window:</span>
-                  <strong>11:30–14:00 IST</strong>
+                  <strong id="bpSummaryWindow">--:-- &ndash; --:-- IST</strong>
                 </div>
                 <div class="summary-detail-row">
                   <span>Maintenance:</span>
-                  <strong>Feasible</strong>
+                  <strong id="bpSummaryFeasibility" style="color: #059669;">Feasible</strong>
                 </div>
                 <div class="summary-detail-row">
-                  <span>Impact:</span>
-                  <strong style="color: #059669;">Lower</strong>
+                  <span>Track Line:</span>
+                  <strong id="bpSummaryLine">--</strong>
                 </div>
                 <div class="summary-detail-row">
-                  <span>Combined:</span>
-                  <strong>3 departments</strong>
+                  <span>Worksite:</span>
+                  <strong id="bpSummaryWorksite">--</strong>
                 </div>
               </div>
               <div style="font-size: 0.72rem; color: var(--text-muted); font-style: italic; padding: 0.25rem;">
-                Delay estimates based on section occupancy and Working Timetable.
+                Delay estimates based on section occupancy and corridor timetable telemetry.
               </div>
             </div>
           </div>
@@ -864,72 +740,65 @@
       <div class="planner-page-container">
         <div class="page-header-block">
           <h2 class="page-main-title">Coordination &amp; Decision History</h2>
-          <div class="page-sub-title">Maintenance coordination metrics and controller decision log &bull; Katpadi-Jolarpettai &bull; 24 Aug 2026</div>
-          <div class="top-right-status-pill" id="coordStatusPill">Block approved &bull; 11:30–14:00</div>
+          <div class="page-sub-title" id="coordSubtitle">Maintenance coordination metrics and optimizer decision log &bull; Single Source of Truth</div>
+          <div class="top-right-status-pill" id="coordStatusPill">Optimizer Auto-Scheduled</div>
         </div>
 
         <!-- 4 Metric KPI Cards (Screenshot 4) -->
         <div class="coord-kpi-grid">
           <div class="coord-kpi-box">
             <div class="coord-kpi-title">Maintenance Tasks</div>
-            <div class="coord-kpi-val">3</div>
-            <div class="coord-kpi-sub">on section today</div>
+            <div class="coord-kpi-val" id="coordKpiTasks">--</div>
+            <div class="coord-kpi-sub" id="coordKpiTasksSub">on corridor section</div>
           </div>
 
           <div class="coord-kpi-box">
-            <div class="coord-kpi-title">Blocks Planned / Combined</div>
-            <div class="coord-kpi-val" style="color: #059669;">1 / 1</div>
-            <div class="coord-kpi-sub">11:30–14:00 IST</div>
+            <div class="coord-kpi-title">Auto-Scheduled Blocks</div>
+            <div class="coord-kpi-val" id="coordKpiScheduled" style="color: #059669;">--</div>
+            <div class="coord-kpi-sub" id="coordKpiScheduledSub">assigned by optimizer</div>
           </div>
 
           <div class="coord-kpi-box">
-            <div class="coord-kpi-title">Controller Decisions</div>
-            <div class="coord-kpi-val">1</div>
-            <div class="coord-kpi-sub">1 accepted &bull; 0 modified &bull; 0 rejected</div>
+            <div class="coord-kpi-title">Optimizer Decisions</div>
+            <div class="coord-kpi-val" id="coordKpiDecisions">--</div>
+            <div class="coord-kpi-sub">automated evaluations</div>
           </div>
 
           <div class="coord-kpi-box">
-            <div class="coord-kpi-title">Approved Block Impact</div>
-            <div class="coord-kpi-val" style="color: #059669;">18 min</div>
-            <div class="coord-kpi-sub">estimated delay</div>
+            <div class="coord-kpi-title">Corridor Telemetry</div>
+            <div class="coord-kpi-val" id="coordKpiTelemetry" style="font-size: 0.95rem; color: #0284c7;">--</div>
+            <div class="coord-kpi-sub" id="coordKpiTelemetrySub">verified data feed</div>
           </div>
         </div>
 
         <!-- Decision History Table Card -->
         <div class="table-card">
-          <div class="table-title-header">Decision History</div>
+          <div class="table-title-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Optimizer Decision History</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">Single Source of Truth</span>
+          </div>
           <table class="decision-history-table">
             <thead>
               <tr>
                 <th>TIME</th>
-                <th>TASKS</th>
-                <th>CANDIDATES</th>
-                <th>RECOMMENDED</th>
-                <th>REASON</th>
-                <th>CONTROLLER DECISION</th>
-                <th>STATUS</th>
+                <th>REQ ID</th>
+                <th>DEPARTMENT</th>
+                <th>CORRIDOR</th>
+                <th>REQUESTED WINDOW</th>
+                <th>DURATION</th>
+                <th>OPTIMIZER-SELECTED WINDOW</th>
+                <th>CONFLICTS CONSIDERED</th>
+                <th>DECISION / STATUS</th>
+                <th>DATA SOURCE</th>
                 <th>ACTION</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td style="font-family: var(--font-mono); color: #0284c7; font-weight: 600;" id="decisionRowTime">11:36 pm</td>
-                <td><code>MT-SR-ENG-104, MT-SR-SNT-218, MT-SR-TRD-309</code></td>
-                <td>W-A, W-B, W-C</td>
-                <td><span class="badge-pill type-defective" style="background: #dcfce7; color: #16a34a;">W-B</span></td>
-                <td style="max-width: 240px; line-height: 1.4;">
-                  Recommended because it completes the required Engineering, S&amp;T and Traction work on Katpadi&ndash;Jolarpettai in one coordinated block...
-                </td>
-                <td><span class="badge-pill type-defective" style="background: #dcfce7; color: #16a34a;">Approved</span></td>
-                <td>Approved &mdash; advisory record logged</td>
-                <td><button class="rf-btn rf-btn-outline" style="padding: 0.25rem 0.65rem; font-size: 0.75rem;" id="btnViewDecisionDetails">View Details</button></td>
-              </tr>
-            </tbody>
+            <tbody id="coordDecisionHistoryTbody"></tbody>
           </table>
         </div>
 
         <div class="table-footer-note" style="margin-top: 0.75rem;">
-          <em>RailFlow assessment: W-B (11:30–14:00). Controller decision: Approved. RailFlow is advisory &mdash; decisions are recorded but not executed. Final authority remains with the authorised railway operating personnel.</em>
+          <em>Scheduled by RailFlow Optimizer — Decision-Support Prototype. RailFlow provides automated decision-support recommendations. Final authority remains with authorised railway operating personnel.</em>
         </div>
       </div>
     </div>
@@ -943,25 +812,26 @@
         </div>
 
         <div class="table-card" style="padding: 1.5rem; margin-bottom: 1.5rem;">
-          <h4 style="margin-bottom: 0.5rem; font-size: 0.95rem; color: var(--primary-navy);">Active Optimization Rules:</h4>
+          <h4 style="margin-bottom: 0.5rem; font-size: 0.95rem; color: var(--primary-navy);">Configured Operational &amp; Prototype Rules:</h4>
           <ul style="font-size: 0.82rem; line-height: 1.8; color: var(--text-sub); margin-left: 1.25rem;">
             <li><strong>Rule C-FIFO-01:</strong> First-In First-Out conflict resolution for equal priority freight and passenger flows.</li>
             <li><strong>Rule C-BOARD-01:</strong> Railway Board Priority List precedence enforced (Vande Bharat &gt; Rajdhani &gt; Superfast Express &gt; Passenger &gt; Freight).</li>
-            <li><strong>Rule OHE-ISO-25KV:</strong> Mandatory synchronized traction power isolation for heavy track tamping on UP line.</li>
-            <li><strong>TSR Rule:</strong> Maximum allowable speed on adjacent DOWN line during maintenance: 30 km/h Caution Order.</li>
+            <li><strong>Traction Power Block:</strong> Conditional operational requirement &mdash; 25kV OHE electrical isolation applies strictly to worksite conditions involving overhead equipment (TRD catenary, tower wagon). Civil/Track activities without OHE involvement operate without automatic Power Block.</li>
+            <li><strong>Adjacent Line Caution Speed:</strong> Configured operational/prototype value (30 km/h &mdash; Current Configuration) applied to adjacent tracks during block possession.</li>
+            <li><strong>Minimum Safety Headway:</strong> Configured operational/prototype margin (12 min &mdash; Current Configuration) applied to train clearance buffer boundaries.</li>
           </ul>
 
           <div class="config-settings-grid">
             <div class="config-item-box">
-              <label>Sectional Maximum Speed (km/h)</label>
+              <label>Sectional Maximum Speed (km/h) &mdash; Prototype Value</label>
               <input type="number" class="config-input" id="cfgMaxSpeed" value="130">
             </div>
             <div class="config-item-box">
-              <label>Min. Safety Headway Margin (min)</label>
+              <label>Min. Safety Headway Margin (min) &mdash; Prototype Value</label>
               <input type="number" class="config-input" id="cfgHeadway" value="12">
             </div>
             <div class="config-item-box">
-              <label>Adjacent Line Caution Speed (km/h)</label>
+              <label>Adjacent Line Caution Speed (km/h) &mdash; Prototype Value</label>
               <input type="number" class="config-input" id="cfgCautionSpeed" value="30">
             </div>
           </div>

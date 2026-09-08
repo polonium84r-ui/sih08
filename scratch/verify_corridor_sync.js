@@ -18,7 +18,7 @@ function makeRequest(path, method = 'GET', body = null) {
     const dataStr = body ? JSON.stringify(body) : null;
     const req = http.request(
       {
-        hostname: 'localhost',
+        hostname: '127.0.0.1',
         port: 3000,
         path: path,
         method: method,
@@ -59,21 +59,17 @@ function simulateFrontendSync(changedField, initialTrackLine, initialBlockType) 
     } else if (trackLine === "Both UP & DOWN Lines") {
       blockType = "Both Lines Block (Simultaneous)";
     } else if (trackLine === "Station Loop / Yard Track") {
-      if (blockType === "Both Lines Block (Simultaneous)") {
-        blockType = "UP Line Block";
-      }
+      blockType = "Station Loop / Yard Track Block";
     }
   } else if (changedField === "BLOCK_TYPE") {
     if (blockType === "UP Line Block") {
-      if (trackLine !== "Station Loop / Yard Track") {
-        trackLine = "UP Main Line";
-      }
+      trackLine = "UP Main Line";
     } else if (blockType === "DOWN Line Block") {
-      if (trackLine !== "Station Loop / Yard Track") {
-        trackLine = "DOWN Main Line";
-      }
+      trackLine = "DOWN Main Line";
     } else if (blockType === "Both Lines Block (Simultaneous)") {
       trackLine = "Both UP & DOWN Lines";
+    } else if (blockType === "Station Loop / Yard Track Block") {
+      trackLine = "Station Loop / Yard Track";
     }
   }
 
@@ -139,10 +135,10 @@ async function runSuite() {
     `Result: blockType="${tRuleD.blockType}"`
   );
 
-  const tRuleE = simulateFrontendSync("BLOCK_TYPE", "Station Loop / Yard Track", "DOWN Line Block");
+  const tRuleE = simulateFrontendSync("TRACK_LINE", "Station Loop / Yard Track", "UP Line Block");
   assert(
-    tRuleE.trackLine === "Station Loop / Yard Track" && tRuleE.blockType === "DOWN Line Block",
-    "RULE E: Station Loop / Yard Track preserves yard/loop track when block type changes",
+    tRuleE.trackLine === "Station Loop / Yard Track" && tRuleE.blockType === "Station Loop / Yard Track Block",
+    "RULE E: Station Loop / Yard Track synchronizes to Station Loop / Yard Track Block",
     `Result: trackLine="${tRuleE.trackLine}", blockType="${tRuleE.blockType}"`
   );
 
@@ -384,6 +380,97 @@ async function runSuite() {
     !evalHasKpd,
     "PART 18.6: Evaluated CBE -> ED corridor trains do NOT contain any KPD/JTJ trains",
     `Evaluated trains: ${(res943.data.corridorData?.trains || []).map(t => `#${t.trainNumber} ${t.trainName}`).join(', ')}`
+  );
+
+  // -------------------------------------------------------------------------
+  // SECTION 6 — BUNDLED DEPARTMENTAL TIMETABLE CORRIDOR ISOLATION TEST
+  // -------------------------------------------------------------------------
+  console.log('\n--- SECTION 6: Bundled Departmental Timetable Corridor Isolation ---');
+
+  function simulateTimetableBundling(fromCode, toCode, activeLine, activeSlot) {
+    const fromCity = fromCode;
+    const toCity = toCode;
+    const allReqs = CorridorData.requisitions || [];
+
+    const compatibleReqs = allReqs.filter(r => {
+      const rFrom = (r.fromStation || "").toUpperCase();
+      const rTo = (r.toStation || "").toUpperCase();
+
+      const corridorMatch = (rFrom === fromCode && rTo === toCode) ||
+                            (rFrom === toCode && rTo === fromCode) ||
+                            (r.sectionName && r.sectionName.includes(fromCity) && r.sectionName.includes(toCity));
+      if (!corridorMatch) return false;
+
+      const rLine = r.trackLine || "UP Main Line";
+      let lineMatch = false;
+      if (activeLine === "UP Main Line" || activeLine.includes("UP")) {
+        lineMatch = rLine.includes("UP") || rLine.includes("Both");
+      } else if (activeLine === "DOWN Main Line" || activeLine.includes("DOWN")) {
+        lineMatch = rLine.includes("DOWN") || rLine.includes("Both");
+      } else if (activeLine === "Both UP & DOWN Lines" || activeLine.includes("Both")) {
+        lineMatch = true;
+      } else if (activeLine.includes("Yard") || activeLine.includes("Loop") || activeLine.includes("Station")) {
+        lineMatch = rLine.includes("Yard") || rLine.includes("Loop") || rLine.includes("Station");
+      } else {
+        lineMatch = rLine === activeLine;
+      }
+
+      return lineMatch;
+    });
+
+    if (compatibleReqs.length === 0) {
+      return {
+        count: 0,
+        hasActivities: false,
+        fallbackText: "No compatible departmental activities available for bundling.",
+        items: []
+      };
+    }
+
+    return {
+      count: compatibleReqs.length,
+      hasActivities: true,
+      items: compatibleReqs.map(r => ({
+        reqId: r.reqId,
+        department: r.department,
+        sectionName: r.sectionName,
+        trackLine: r.trackLine,
+        kmRange: r.kmRange,
+        slot: r.sanctionedSlot || r.recommendedBlock || activeSlot
+      }))
+    };
+  }
+
+  // Case 1: KPD -> TUP (Tiruppur)
+  const bundleKpdTup = simulateTimetableBundling("KPD", "TUP", "UP Main Line", "11:00 – 13:15 IST");
+  assert(
+    bundleKpdTup.hasActivities === false &&
+    bundleKpdTup.fallbackText === "No compatible departmental activities available for bundling." &&
+    bundleKpdTup.items.length === 0,
+    "SECTION 6.1: Active request KPD -> TUP displays 'No compatible departmental activities available for bundling' and never shows KPD-JTJ activities",
+    `Items count: ${bundleKpdTup.count}, Fallback: "${bundleKpdTup.fallbackText}"`
+  );
+
+  // Case 2: CBE -> ED
+  const bundleCbeEd = simulateTimetableBundling("CBE", "ED", "UP Main Line", "12:00 – 14:30 IST");
+  const cbeHasKpdReqs = bundleCbeEd.items.some(i => i.reqId.includes("218") || i.reqId.includes("104") || i.reqId.includes("309"));
+  assert(
+    bundleCbeEd.hasActivities === true &&
+    bundleCbeEd.items.some(i => i.reqId === "REQ-SR-TRD-943") &&
+    !cbeHasKpdReqs,
+    "SECTION 6.2: CBE -> ED bundled timetable contains ONLY CBE-ED activities (REQ-SR-TRD-943) and strictly excludes KPD-JTJ",
+    `CBE-ED bundled items: ${bundleCbeEd.items.map(i => i.reqId).join(", ")}`
+  );
+
+  // Case 3: KPD -> JTJ
+  const bundleKpdJtj = simulateTimetableBundling("KPD", "JTJ", "UP Main Line", "11:30 – 14:00 IST");
+  const kpdHasCbeReqs = bundleKpdJtj.items.some(i => i.reqId === "REQ-SR-TRD-943");
+  assert(
+    bundleKpdJtj.hasActivities === true &&
+    bundleKpdJtj.items.length >= 3 &&
+    !kpdHasCbeReqs,
+    "SECTION 6.3: KPD -> JTJ bundled timetable contains compatible KPD-JTJ activities and excludes CBE-ED",
+    `KPD-JTJ bundled items: ${bundleKpdJtj.items.map(i => i.reqId).join(", ")}`
   );
 
   console.log('\n================================================================');

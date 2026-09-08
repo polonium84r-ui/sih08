@@ -109,7 +109,7 @@ const server = http.createServer(async (req, res) => {
             return block === 'Both Lines Block (Simultaneous)';
           }
           if (line === 'Station Loop / Yard Track') {
-            return block !== 'Both Lines Block (Simultaneous)';
+            return block === 'Station Loop / Yard Track Block';
           }
           return false;
         }

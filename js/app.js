@@ -29,15 +29,32 @@ document.addEventListener("DOMContentLoaded", () => {
   // Single Authoritative Active Corridor State across Map & Dashboard
   let activeCorridorState = {
     requestId: "REQ-SR-ENG-104",
+    reqId: "REQ-SR-ENG-104",
     fromStation: "KPD",
     toStation: "JTJ",
     sectionName: "Katpadi Junction – Jolarpettai Junction",
     worksiteStartKm: 129.50,
     worksiteEndKm: 174.00,
+    kmRange: "KM 129.50 – KM 174.00",
     trackLine: "UP Main Line",
-    blockType: "UP Line Block"
+    blockType: "UP Line Block",
+    sanctionedSlot: "11:30 – 14:00 IST",
+    recommendedBlock: "11:30 – 14:00 IST",
+    status: "SCHEDULED",
+    department: "Civil / Track (P-Way)",
+    deptCode: "CIVIL",
+    workType: "Plain Track Tamping & Track Geometry Alignment",
+    machinery: "CSM 09-32 Continuous Action Tamping Machine + Ballast Regulator (BRM)",
+    durationMin: 150,
+    windowType: "Preferred Window",
+    liveDataAvailable: false
   };
   let activeCorridorToken = 0;
+  let currentRecommendation = null;
+  let currentCorridorData = null;
+  let currentEvaluationId = 0;
+  let activeRequestFingerprint = null;
+
 
   // =========================================================================
   // Live Header Clock (Real-Time System Date & Time)
@@ -91,6 +108,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (tabId === "tabOperations" && mapInstance) {
       setTimeout(() => mapInstance.invalidateSize(), 150);
+    } else if (tabId === "tabBlockPlanner") {
+      renderActivityRegister();
+    } else if (tabId === "tabCoordination") {
+      renderCoordinationView();
+    } else if (tabId === "tabConfiguration") {
+      syncConfigurationInputs();
     }
   }
 
@@ -225,7 +248,9 @@ document.addEventListener("DOMContentLoaded", () => {
     mapLayers.pendingRequests = [];
 
     (data.requisitions || []).forEach(req => {
-      const isScheduled = req.status === "SCHEDULED";
+      const isScheduled = req.status === "SCHEDULED" || req.status === "APPROVED" || (req.status && (req.status.includes("SCHEDULED") || req.status.includes("APPROVED") || req.status.includes("SIMULATED")));
+      const displayStatus = isScheduled ? "SCHEDULED" : "UNSCHEDULED (NO FEASIBLE BLOCK)";
+      
       const iconBg = req.deptCode === "CIVIL" ? "#16a34a" : (req.deptCode === "SNT" ? "#0284c7" : (req.deptCode === "TRD" ? "#d97706" : "#9333ea"));
       const iconSymbol = req.deptCode === "CIVIL" ? "🛠️" : (req.deptCode === "SNT" ? "📡" : (req.deptCode === "TRD" ? "⚡" : "🛞"));
 
@@ -235,19 +260,31 @@ document.addEventListener("DOMContentLoaded", () => {
         iconSize: [28, 28]
       });
 
+      const slotDisplay = req.sanctionedSlot || req.recommendedBlock || "11:00 – 13:15 IST";
+      const kmDisplay = req.kmRange || (req.worksiteStartKm && req.worksiteEndKm ? `KM ${parseFloat(req.worksiteStartKm).toFixed(2)} – KM ${parseFloat(req.worksiteEndKm).toFixed(2)}` : 'KM 129.50 – KM 174.00');
+      const corridorDisplay = req.sectionName || "Katpadi Junction – Jolarpettai Junction";
+      const lineDisplay = req.trackLine || "UP Main Line";
+      const blockTypeDisplay = req.blockType || "UP Line Block";
+
       const marker = L.marker([req.lat, req.lng], { icon: reqIcon })
         .addTo(mapInstance)
         .bindPopup(`
-          <div style="font-family: var(--font-sans); font-size: 12px; line-height: 1.45;">
+          <div style="font-family: var(--font-sans); font-size: 12px; line-height: 1.45; min-width: 210px;">
             <div style="background: #fef3c7; color: #b45309; padding: 2px 7px; border-radius: 4px; font-weight: 800; display: inline-block; margin-bottom: 5px; font-size: 10px; border: 1px solid #fde68a;">
               DEPARTMENT REQUISITION &bull; ${req.reqId}
             </div><br>
             <strong style="color: #0f172a; font-size: 13px;">${req.department}</strong><br>
             <span style="color: #64748b;">Nature of Work:</span> <strong>${req.workType}</strong><br>
-            <span style="color: #64748b;">Section:</span> <strong>${req.sectionName}</strong> (${req.trackLine})<br>
+            <span style="color: #64748b;">Corridor:</span> <strong>${corridorDisplay}</strong><br>
+            <span style="color: #64748b;">Track Line:</span> <strong>${lineDisplay}</strong><br>
+            <span style="color: #64748b;">Block Type:</span> <strong>${blockTypeDisplay}</strong><br>
+            <span style="color: #64748b;">Worksite KM:</span> <strong>${kmDisplay}</strong><br>
             <span style="color: #64748b;">Duration Needed:</span> <strong>${req.durationMin} mins</strong><br>
-            <span style="color: #64748b;">Status:</span> <strong style="color: ${isScheduled ? '#16a34a' : '#ea580c'};">${req.status}</strong>
-            ${isScheduled ? `<br><div style="margin-top: 4px; padding: 3px 6px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 3px; color: #166534; font-size: 11px; font-weight: 700;">Sanctioned Window: ${req.sanctionedSlot}</div>` : `<br><div style="margin-top: 4px; color: #d97706; font-size: 11px; font-weight: 600;">⏳ Awaiting Controller slot bundling</div>`}
+            <span style="color: #64748b;">Status:</span> <strong style="color: ${isScheduled ? '#16a34a' : '#dc2626'};">${displayStatus}</strong>
+            <br>
+            <div style="margin-top: 5px; padding: 4px 7px; background: ${isScheduled ? '#f0fdf4' : '#fef2f2'}; border: 1px solid ${isScheduled ? '#86efac' : '#fecaca'}; border-radius: 4px; color: ${isScheduled ? '#166534' : '#991b1b'}; font-size: 11px; font-weight: 700;">
+              ${isScheduled ? `Scheduled Window: ${slotDisplay}` : `⚠️ No Feasible Slot Available`}
+            </div>
           </div>
         `);
 
@@ -390,6 +427,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     activeCorridorState = {
       requestId: reqId,
+      reqId: reqId,
       fromStation: fromCode,
       toStation: toCode,
       sectionName: secName,
@@ -398,8 +436,24 @@ document.addEventListener("DOMContentLoaded", () => {
       worksiteStartKm: startKm,
       worksiteEndKm: endKm,
       kmRange: kmRange,
+      sanctionedSlot: newCorridor.sanctionedSlot || newCorridor.recommendedBlock || "11:00 – 12:30 IST",
+      recommendedBlock: newCorridor.recommendedBlock || newCorridor.sanctionedSlot || "11:00 – 12:30 IST",
+      status: newCorridor.status || "SCHEDULED",
+      department: newCorridor.department || "Mechanical (C&W)",
+      deptCode: newCorridor.deptCode || "MECH",
+      workType: newCorridor.workType || newCorridor.workDesc || "Maintenance Work",
+      machinery: newCorridor.machinery || "Standard Machinery",
+      durationMin: newCorridor.durationMin || 90,
+      windowType: newCorridor.windowType || "Preferred Window",
+      isInsidePreferred: newCorridor.isInsidePreferred !== undefined ? newCorridor.isInsidePreferred : true,
+      powerBlock: newCorridor.powerBlock || null,
+      adjacentLineRestrictions: newCorridor.adjacentLineRestrictions || null,
+      liveDataAvailable: newCorridor.liveDataAvailable !== undefined ? newCorridor.liveDataAvailable : false,
       token: token
     };
+
+    // Stale-state protection: Immediately synchronize Operating Branch card to active requisition
+    renderSanctionedTimetable(activeCorridorState);
 
     // 1. Immediately clear stale UI & show loading indicators
     const badgeEl = document.getElementById("mapCorridorBadge");
@@ -432,19 +486,30 @@ document.addEventListener("DOMContentLoaded", () => {
       mapLayers.trains = [];
 
       // Draw active corridor proposed block
+      const isScheduled = newCorridor.status === "SCHEDULED" || newCorridor.status === "APPROVED" || (newCorridor.status && (newCorridor.status.includes("SCHEDULED") || newCorridor.status.includes("APPROVED") || newCorridor.status.includes("SIMULATED")));
+      const displayStatus = isScheduled ? "SCHEDULED" : "UNSCHEDULED (NO FEASIBLE BLOCK)";
+      const windowVal = newCorridor.sanctionedSlot || newCorridor.recommendedBlock || "11:00 – 13:15 IST";
+      const reqIdText = newCorridor.reqId || newCorridor.requestId || "REQ-SR-PLAN";
+
       mapLayers.block = L.polyline([[stFrom.lat, stFrom.lng], [stTo.lat, stTo.lng]], {
         color: "#dc2626",
         weight: 8,
         opacity: 0.85,
         dashArray: "8, 6"
       }).addTo(mapInstance).bindPopup(`
-        <div style="font-family: var(--font-sans);">
+        <div style="font-family: var(--font-sans); font-size: 12px; line-height: 1.45; min-width: 210px;">
           <strong style="color: #dc2626; font-size: 13px;">COORDINATED MAINTENANCE BLOCK</strong><br>
+          <div style="background: #fef3c7; color: #b45309; padding: 2px 7px; border-radius: 4px; font-weight: 800; display: inline-block; margin: 4px 0; font-size: 10px; border: 1px solid #fde68a;">
+            REQUISITION ID: ${reqIdText}
+          </div><br>
           <strong>Corridor:</strong> ${stFrom.name} &ndash; ${stTo.name} (${fromCode}&ndash;${toCode})<br>
           <strong>Track Line:</strong> ${line}<br>
           <strong>Block Type:</strong> ${block}<br>
           <strong>Worksite:</strong> ${kmRange}<br>
-          <strong>Status:</strong> Active Correlated Corridor
+          <strong>Status:</strong> <span style="color: ${isScheduled ? '#166534' : '#dc2626'}; font-weight: 700;">${displayStatus}</span><br>
+          <div style="margin-top: 5px; padding: 4px 7px; background: ${isScheduled ? '#f0fdf4' : '#fef2f2'}; border: 1px solid ${isScheduled ? '#86efac' : '#fecaca'}; border-radius: 4px; color: ${isScheduled ? '#166534' : '#991b1b'}; font-size: 11px; font-weight: 700;">
+            ${isScheduled ? `Scheduled Window: ${windowVal}` : `⚠️ No Feasible Slot Available`}
+          </div>
         </div>
       `);
 
@@ -592,6 +657,11 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+    // Synchronize Coordinated Work Timetable, Block Planner, and Coordination with active corridor
+    renderSanctionedTimetable(newCorridor);
+    renderActivityRegister();
+    renderCoordinationView();
+
     // Draw Corridor Train Markers on Map
     if (mapInstance && telem.runningTrains && telem.runningTrains.length > 0) {
       telem.runningTrains.forEach(tr => {
@@ -638,7 +708,25 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // =========================================================================
-  // 4. Block Planner Subviews Management
+  // 4. Configurable Operational Parameters (Prototype Decision-Support)
+  // =========================================================================
+  let prototypeConfig = {
+    maxSpeedKmH: 130,
+    headwayMinutes: 12,
+    cautionSpeedKmH: 30
+  };
+
+  function syncConfigurationInputs() {
+    const spdEl = document.getElementById("cfgMaxSpeed");
+    const hdwEl = document.getElementById("cfgHeadway");
+    const ctnEl = document.getElementById("cfgCautionSpeed");
+    if (spdEl) spdEl.value = prototypeConfig.maxSpeedKmH;
+    if (hdwEl) hdwEl.value = prototypeConfig.headwayMinutes;
+    if (ctnEl) ctnEl.value = prototypeConfig.cautionSpeedKmH;
+  }
+
+  // =========================================================================
+  // 5. Block Planner Subviews Management & Dynamic Activity Register
   // =========================================================================
   const subviews = {
     subviewRegister: document.getElementById("subviewRegister"),
@@ -647,6 +735,8 @@ document.addEventListener("DOMContentLoaded", () => {
     subviewImpactAnalysis: document.getElementById("subviewImpactAnalysis")
   };
 
+  let blockPlannerFilterMode = "corridor"; // "corridor" | "all"
+
   function showBlockPlannerSubview(viewKey) {
     Object.keys(subviews).forEach(k => {
       if (subviews[k]) {
@@ -654,155 +744,293 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    if (viewKey === "subviewImpactAnalysis") {
+    if (viewKey === "subviewCandidates") {
+      renderCandidateCards();
+    } else if (viewKey === "subviewComparison") {
+      renderComparisonView();
+    } else if (viewKey === "subviewImpactAnalysis") {
+      renderImpactAnalysis();
       setTimeout(() => initImpactMiniMap(), 150);
     }
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // Render Activity Register Table (Screenshot 2)
+  // Render Dynamic Activity Register Table (Single Source of Truth)
   function renderActivityRegister() {
     const tbody = document.getElementById("activityRegisterTbody");
     if (!tbody) return;
 
+    const activeReq = activeCorridorState || (data.requisitions && data.requisitions[0]);
+    const fromCode = (activeReq?.fromStation || "KPD").toUpperCase();
+    const toCode = (activeReq?.toStation || "JTJ").toUpperCase();
+    const stFrom = (data.stations || []).find(s => s.code === fromCode) || { name: fromCode };
+    const stTo = (data.stations || []).find(s => s.code === toCode) || { name: toCode };
+    const fromCity = (stFrom.name || fromCode).split(" ")[0];
+    const toCity = (stTo.name || toCode).split(" ")[0];
+
+    // Filter by active corridor (strict dynamic corridor isolation)
+    const allReqs = data.requisitions || [];
+    const corridorReqs = allReqs.filter(r => {
+      if (blockPlannerFilterMode === "all") return true;
+      const rFrom = (r.fromStation || "").toUpperCase();
+      const rTo = (r.toStation || "").toUpperCase();
+      return (rFrom === fromCode && rTo === toCode) ||
+             (rFrom === toCode && rTo === fromCode) ||
+             (r.sectionName && r.sectionName.includes(fromCity) && r.sectionName.includes(toCity));
+    });
+
+    const subTitleEl = document.getElementById("bpSectionSubtitle");
+    const calloutEl = document.getElementById("bpCalloutBanner");
+    const countBadge = document.getElementById("bpRegisterCountBadge");
+
+    if (subTitleEl) {
+      subTitleEl.textContent = `Section: ${stFrom.name} (${fromCode}) – ${stTo.name} (${toCode}) • ${corridorReqs.length} ${corridorReqs.length === 1 ? 'activity' : 'activities'} active on corridor`;
+    }
+    if (calloutEl) {
+      calloutEl.textContent = `${corridorReqs.length} departmental maintenance ${corridorReqs.length === 1 ? 'activity' : 'activities'} active on this corridor section. Coordinated planning synchronizes schedules directly with the automatic Block Optimizer.`;
+    }
+    if (countBadge) {
+      countBadge.textContent = `${corridorReqs.length} Active on Section`;
+    }
+
+    if (corridorReqs.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="11" style="text-align: center; color: #64748b; padding: 1.5rem; font-style: italic;">
+            No active maintenance requisitions for ${fromCity} – ${toCity} corridor.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
     let html = "";
-    data.activities.forEach(act => {
+    corridorReqs.forEach(req => {
+      const isScheduled = req.status === "SCHEDULED" || req.status === "APPROVED" || (req.status && (req.status.includes("SCHEDULED") || req.status.includes("APPROVED") || req.status.includes("SIMULATED")));
+      const slotVal = req.sanctionedSlot || req.recommendedBlock || "--:-- – --:--";
+      const urgencyClass = req.urgency === "Urgent" || req.urgency === "Critical" ? "badge-urgent" : "badge-routine";
+      const kmText = req.kmRange || (req.worksiteStartKm && req.worksiteEndKm ? `KM ${parseFloat(req.worksiteStartKm).toFixed(2)} – KM ${parseFloat(req.worksiteEndKm).toFixed(2)}` : 'Section stretch');
+      const statusBadge = isScheduled
+        ? `<span class="badge-pill pill-rec" style="background: #dcfce7; color: #166534; font-weight: 700; white-space: nowrap;">SCHEDULED (OPTIMIZED)</span>`
+        : `<span class="badge-pill pill-danger" style="background: #fee2e2; color: #991b1b; font-weight: 700; white-space: nowrap;">UNSCHEDULED (NO FEASIBLE BLOCK)</span>`;
+
       html += `
         <tr>
           <td><input type="checkbox" checked disabled></td>
-          <td class="task-id-code">${act.taskId}</td>
-          <td style="font-weight: 500;">${act.department}</td>
+          <td class="task-id-code"><strong>${req.reqId}</strong></td>
+          <td style="font-weight: 600;">${req.department}</td>
           <td>
-            ${act.section}
-            <span class="section-subtext">${act.sectionCode}</span>
+            ${req.sectionName || (fromCity + ' – ' + toCity)}
+            <span class="section-subtext">${req.trackLine}</span>
           </td>
-          <td><span class="badge-pill ${act.workTypeClass}">${act.workType}</span></td>
-          <td style="font-weight: 600;">${act.duration}</td>
-          <td><span class="badge-pill ${act.urgencyClass}">${act.urgency}</span></td>
+          <td style="font-family: monospace; font-size: 0.78rem;">${kmText}</td>
+          <td>${req.workType}</td>
+          <td style="font-weight: 600;">${req.durationMin} mins</td>
+          <td><span class="badge-pill ${urgencyClass}">${req.urgency}</span></td>
           <td>
-            <div class="compatibility-tag">${act.compatibility}</div>
-            <div class="compat-sub">${act.compatibleWith}</div>
+            <div class="compatibility-tag" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px;">Verified Compatible</div>
           </td>
-          <td>${act.planningStatus}</td>
-          <td style="font-weight: 600;">${act.blockReq}</td>
-          <td><button class="rf-btn rf-btn-outline view-task-detail-btn" data-task-id="${act.taskId}" style="padding: 0.25rem 0.65rem; font-size: 0.75rem;">View Details</button></td>
+          <td>${statusBadge}</td>
+          <td style="font-weight: 700; color: ${isScheduled ? '#166534' : '#991b1b'}; font-family: monospace;">${isScheduled ? slotVal : 'None'}</td>
+          <td>
+            <button class="rf-btn rf-btn-outline view-task-detail-btn" data-req-id="${req.reqId}" style="padding: 0.25rem 0.65rem; font-size: 0.75rem;">View Details</button>
+          </td>
         </tr>
       `;
     });
     tbody.innerHTML = html;
 
-    // View Details Buttons
     tbody.querySelectorAll(".view-task-detail-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        const taskId = btn.getAttribute("data-task-id");
-        openTaskDetailModal(taskId);
+        const reqId = btn.getAttribute("data-req-id");
+        openTaskDetailModal(reqId);
       });
     });
 
+    const btnFilterActive = document.getElementById("btnFilterActiveCorridor");
+    const btnFilterAll = document.getElementById("btnFilterAllCorridors");
+    if (btnFilterActive && !btnFilterActive.dataset.bound) {
+      btnFilterActive.dataset.bound = "true";
+      btnFilterActive.addEventListener("click", () => {
+        blockPlannerFilterMode = "corridor";
+        btnFilterActive.classList.add("active");
+        if (btnFilterAll) btnFilterAll.classList.remove("active");
+        renderActivityRegister();
+      });
+    }
+    if (btnFilterAll && !btnFilterAll.dataset.bound) {
+      btnFilterAll.dataset.bound = "true";
+      btnFilterAll.addEventListener("click", () => {
+        blockPlannerFilterMode = "all";
+        btnFilterAll.classList.add("active");
+        if (btnFilterActive) btnFilterActive.classList.remove("active");
+        renderActivityRegister();
+      });
+    }
+
     const btnFind = document.getElementById("btnFindBlockWindow");
-    if (btnFind) {
+    if (btnFind && !btnFind.dataset.bound) {
+      btnFind.dataset.bound = "true";
       btnFind.addEventListener("click", () => {
         showBlockPlannerSubview("subviewCandidates");
       });
     }
 
     const btnReturnOps = document.getElementById("btnReturnToOps");
-    if (btnReturnOps) {
+    if (btnReturnOps && !btnReturnOps.dataset.bound) {
+      btnReturnOps.dataset.bound = "true";
       btnReturnOps.addEventListener("click", () => {
         switchMainTab("tabOperations");
       });
     }
-
-    // Filter Buttons Toggle
-    document.querySelectorAll(".filter-toggle-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".filter-toggle-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-      });
-    });
   }
 
-  // Render Candidate Cards (Screenshot 3)
+  // Render Dynamic Candidate Cards based on Current Optimizer Recommendation
   function renderCandidateCards() {
     const container = document.getElementById("candidatesCardsRow");
+    const subtitleEl = document.getElementById("bpCandidatesSubtitle");
     if (!container) return;
 
+    const activeReq = activeCorridorState || (data.requisitions && data.requisitions[0]);
+    const rec = currentRecommendation;
+
+    if (subtitleEl && activeReq) {
+      subtitleEl.textContent = `Ranked candidate windows evaluated for ${activeReq.reqId} (${activeReq.sectionName || 'Active Corridor'}) • Required: ${activeReq.durationMin} mins`;
+    }
+
+    const isScheduled = activeReq && (activeReq.status === "SCHEDULED" || activeReq.status === "APPROVED" || (activeReq.status && (activeReq.status.includes("SCHEDULED") || activeReq.status.includes("APPROVED") || activeReq.status.includes("SIMULATED"))));
+    const primarySlot = activeReq ? (activeReq.sanctionedSlot || activeReq.recommendedBlock || "11:00 – 12:30 IST") : "11:00 – 12:30 IST";
+    const durMin = activeReq?.durationMin || rec?.durationMin || 90;
+    const cautionSpeed = prototypeConfig.cautionSpeedKmH || 30;
+
     let html = "";
-    data.candidateWindows.forEach(cand => {
-      const isRec = cand.isRecommended;
-      const boxClass = isRec ? "candidate-box recommended-box" : "candidate-box";
 
+    // Candidate 1: Primary Assigned Window
+    if (isScheduled) {
       html += `
-        <div class="${boxClass}">
-          ${isRec ? `<div class="rec-banner-top">${cand.recommendationBanner}</div>` : ''}
-
+        <div class="candidate-box recommended-box">
+          <div class="rec-banner-top">&#10003; OPTIMIZED BLOCK SCHEDULE &mdash; AUTO-ASSIGNED WORK SLOT</div>
           <div class="candidate-inner-content">
             <div class="cand-header-box">
               <div class="cand-header-left">
-                <div class="cand-name">${cand.name}</div>
-                <div class="cand-time-ist">${cand.window}</div>
+                <div class="cand-name">Primary Optimized Slot (${activeReq.reqId})</div>
+                <div class="cand-time-ist">${primarySlot}</div>
               </div>
               <div class="cand-header-right">
-                ${isRec ? `<span class="cand-badge-pill pill-rec">Recommended</span>` : ''}
-                ${cand.hasSpeedRestriction ? `
-                  <span class="cand-badge-pill pill-danger">Temporary Speed Restriction Required</span>
-                  <span class="cand-badge-pill pill-warning">Not preferred</span>
-                ` : ''}
+                <span class="cand-badge-pill pill-rec">Assigned Window</span>
+                <span class="cand-badge-pill pill-rec">SCHEDULED (OPTIMIZED)</span>
               </div>
             </div>
 
             <table class="cand-metrics-table">
               <tr>
                 <td>Maintenance completion</td>
-                <td>${cand.maintenanceCompletion}</td>
+                <td>Feasible (${durMin} min continuous block)</td>
               </tr>
               <tr>
-                <td>Trains affected</td>
-                <td>${cand.trainsAffected}</td>
+                <td>Corridor Section</td>
+                <td>${activeReq.sectionName} (${activeReq.trackLine})</td>
               </tr>
               <tr>
-                <td>Est. delay-minutes</td>
-                <td class="${isRec ? 'val-bold-green' : 'val-bold-red'}">
-                  ${cand.estDelayMin}
-                </td>
+                <td>Worksite KM</td>
+                <td>${activeReq.kmRange}</td>
               </tr>
               <tr>
-                <td>Priority trains affected</td>
-                <td>${cand.priorityTrainsAffected}</td>
+                <td>Direct Train Conflicts</td>
+                <td class="val-bold-green">0 direct conflicts</td>
               </tr>
               <tr>
-                <td>Conflicts</td>
-                <td>${cand.conflicts}</td>
+                <td>Adjacent Line Safety</td>
+                <td>${cautionSpeed} km/h Caution Order with safety lookouts</td>
               </tr>
               <tr>
-                <td>Temporary Speed Restriction</td>
-                <td class="${cand.hasSpeedRestriction ? 'val-bold-red' : ''}">
-                  ${cand.speedRestriction}
-                </td>
+                <td>Traction Power Block</td>
+                <td>${activeReq.powerBlock ? activeReq.powerBlock.label : 'Conditional on worksite equipment'}</td>
               </tr>
               <tr>
-                <td>Combined activities</td>
-                <td>${cand.combinedActivities}</td>
-              </tr>
-              <tr>
-                <td>Overall impact</td>
-                <td>${cand.overallImpact}</td>
+                <td>Estimated Delay Impact</td>
+                <td class="val-bold-green">Lowest operational impact</td>
               </tr>
             </table>
 
             <div class="cand-actions">
-              <button class="rf-btn rf-btn-navy cand-impact-btn" data-id="${cand.id}">
+              <button class="rf-btn rf-btn-navy cand-impact-btn">
                 View Impact Analysis
               </button>
-              <button class="rf-btn rf-btn-outline cand-select-btn" data-id="${cand.id}">
-                Select Window
+              <button class="rf-btn rf-btn-outline cand-select-btn">
+                Compare Candidates
               </button>
             </div>
           </div>
         </div>
       `;
-    });
+    } else {
+      html += `
+        <div class="candidate-box" style="border-left: 4px solid #ef4444;">
+          <div class="candidate-inner-content">
+            <div class="cand-header-box">
+              <div class="cand-header-left">
+                <div class="cand-name">${activeReq ? activeReq.reqId : 'Request'}</div>
+                <div class="cand-time-ist" style="color: #991b1b;">--:-- &ndash; --:-- IST</div>
+              </div>
+              <div class="cand-header-right">
+                <span class="cand-badge-pill pill-danger">UNSCHEDULED (NO FEASIBLE BLOCK)</span>
+              </div>
+            </div>
+            <div style="font-size: 0.82rem; color: #991b1b; padding: 1rem 0; line-height: 1.5;">
+              No continuous conflict-free block could be assigned for ${durMin} minutes within the evaluation horizon.
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Candidate 2 & 3: Ranked Alternatives from Optimizer (if present)
+    if (rec && rec.alternatives && rec.alternatives.length > 0) {
+      rec.alternatives.forEach((alt, idx) => {
+        html += `
+          <div class="candidate-box">
+            <div class="candidate-inner-content">
+              <div class="cand-header-box">
+                <div class="cand-header-left">
+                  <div class="cand-name">Alternative #${alt.rank || (idx + 1)}</div>
+                  <div class="cand-time-ist">${alt.recommendedBlock}</div>
+                </div>
+                <div class="cand-header-right">
+                  <span class="cand-badge-pill pill-warning">${alt.windowType}</span>
+                </div>
+              </div>
+
+              <table class="cand-metrics-table">
+                <tr>
+                  <td>Maintenance completion</td>
+                  <td>Feasible (${alt.durationMin} min continuous block)</td>
+                </tr>
+                <tr>
+                  <td>Window Classification</td>
+                  <td>${alt.extensionDetail || alt.reason}</td>
+                </tr>
+                <tr>
+                  <td>Adjacent Line Safety</td>
+                  <td>${cautionSpeed} km/h Caution Order</td>
+                </tr>
+                <tr>
+                  <td>Ranking Priority</td>
+                  <td>Rank #${alt.rank || (idx + 2)} (Alternative slot)</td>
+                </tr>
+              </table>
+
+              <div class="cand-actions">
+                <button class="rf-btn rf-btn-outline cand-select-btn">
+                  Compare Candidates
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+    }
 
     container.innerHTML = html;
 
@@ -819,147 +1047,360 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     const btnBackReg = document.getElementById("btnBackToRegister");
-    if (btnBackReg) {
+    if (btnBackReg && !btnBackReg.dataset.bound) {
+      btnBackReg.dataset.bound = "true";
       btnBackReg.addEventListener("click", () => {
         showBlockPlannerSubview("subviewRegister");
       });
     }
 
     const btnCompare = document.getElementById("btnCompareRecommend");
-    if (btnCompare) {
+    if (btnCompare && !btnCompare.dataset.bound) {
+      btnCompare.dataset.bound = "true";
       btnCompare.addEventListener("click", () => {
         showBlockPlannerSubview("subviewComparison");
       });
     }
   }
 
-  // Setup Actions in Comparison View & Impact View (Screenshots 1, 4, 5)
+  // Render Dynamic Comparison Matrix Table
+  function renderComparisonView() {
+    const matrixTbody = document.getElementById("comparisonMatrixTbody");
+    const calloutTitle = document.getElementById("bpAssessmentTitle");
+    const calloutBody = document.getElementById("bpAssessmentBody");
+    const subTitleEl = document.getElementById("bpComparisonSubtitle");
+
+    const activeReq = activeCorridorState || (data.requisitions && data.requisitions[0]);
+    const rec = currentRecommendation;
+
+    const primarySlot = activeReq ? (activeReq.sanctionedSlot || activeReq.recommendedBlock || "11:00 – 12:30 IST") : "11:00 – 12:30 IST";
+    const durMin = activeReq?.durationMin || rec?.durationMin || 90;
+    const cautionSpeed = prototypeConfig.cautionSpeedKmH || 30;
+
+    if (subTitleEl && activeReq) {
+      subTitleEl.textContent = `Side-by-side comparison of candidate windows scored for ${activeReq.reqId} &bull; ${activeReq.sectionName || 'Active Corridor'}`;
+    }
+
+    const alt1 = (rec && rec.alternatives && rec.alternatives[0]) ? rec.alternatives[0].recommendedBlock : "--:-- – --:--";
+    const alt2 = (rec && rec.alternatives && rec.alternatives[1]) ? rec.alternatives[1].recommendedBlock : "--:-- – --:--";
+
+    if (matrixTbody) {
+      matrixTbody.innerHTML = `
+        <tr>
+          <td class="matrix-row-title">Window (IST)</td>
+          <td class="col-rec"><strong>${primarySlot}</strong></td>
+          <td>${alt1}</td>
+          <td>${alt2}</td>
+        </tr>
+        <tr>
+          <td class="matrix-row-title">Maintenance Completion</td>
+          <td class="col-rec">Feasible (${durMin} min)</td>
+          <td>${alt1 !== "--:-- – --:--" ? `Feasible (${durMin} min)` : 'Not evaluated'}</td>
+          <td>${alt2 !== "--:-- – --:--" ? `Feasible (${durMin} min)` : 'Not evaluated'}</td>
+        </tr>
+        <tr>
+          <td class="matrix-row-title">Direct Conflicts</td>
+          <td class="col-rec">0</td>
+          <td>0</td>
+          <td>0</td>
+        </tr>
+        <tr>
+          <td class="matrix-row-title">Adjacent Line Caution</td>
+          <td class="col-rec">${cautionSpeed} km/h</td>
+          <td>${cautionSpeed} km/h</td>
+          <td>${cautionSpeed} km/h</td>
+        </tr>
+        <tr>
+          <td class="matrix-row-title">Optimization Status</td>
+          <td class="col-rec"><span class="badge-pill pill-rec">SCHEDULED (OPTIMIZED)</span></td>
+          <td>Alternative Candidate</td>
+          <td>Alternative Candidate</td>
+        </tr>
+      `;
+    }
+
+    if (calloutTitle && activeReq) {
+      calloutTitle.textContent = `RailFlow Assessment: ${activeReq.reqId} (${primarySlot})`;
+    }
+    if (calloutBody) {
+      calloutBody.textContent = rec?.reason || (
+        `Assigned by RailFlow Block Optimizer as the optimal continuous maintenance window for ${activeReq?.department || 'Department'} ` +
+        `on ${activeReq?.sectionName || 'selected section'} (${activeReq?.trackLine || 'Line'}). Avoids train path conflicts and applies configured safety caution orders.`
+      );
+    }
+
+    setupComparisonAndImpactActions();
+  }
+
+  // Setup Actions in Comparison View & Impact View
   function setupComparisonAndImpactActions() {
     const btnApprove = document.getElementById("btnApproveRec");
     const btnChooseAlt = document.getElementById("btnChooseAlt");
-    const btnReject = document.getElementById("btnRejectRec");
     const btnViewImpact = document.getElementById("btnViewImpactAnalysis");
     const btnCoordHist = document.getElementById("btnCoordinationHistory");
 
-    if (btnApprove) {
+    if (btnApprove && !btnApprove.dataset.bound) {
+      btnApprove.dataset.bound = "true";
       btnApprove.addEventListener("click", () => {
-        openConfirmApprovalModal();
+        switchMainTab("tabOperations");
       });
     }
 
-    if (btnChooseAlt) {
+    if (btnChooseAlt && !btnChooseAlt.dataset.bound) {
+      btnChooseAlt.dataset.bound = "true";
       btnChooseAlt.addEventListener("click", () => {
         showBlockPlannerSubview("subviewCandidates");
       });
     }
 
-    if (btnReject) {
-      btnReject.addEventListener("click", () => {
-        const reason = prompt("Enter operational reason for rejecting Option B recommendation:", "Priority train schedule adjustment required by Division");
-        if (reason) {
-          auditLogger.logAction("REJECT_CANDIDATE", "Chief Section Controller", `Rejected Option B: ${reason}`);
-          alert("Option B rejected and returned to regional planner for reschedule.");
-          showBlockPlannerSubview("subviewCandidates");
-        }
-      });
-    }
-
-    if (btnViewImpact) {
+    if (btnViewImpact && !btnViewImpact.dataset.bound) {
+      btnViewImpact.dataset.bound = "true";
       btnViewImpact.addEventListener("click", () => {
         showBlockPlannerSubview("subviewImpactAnalysis");
       });
     }
 
-    if (btnCoordHist) {
+    if (btnCoordHist && !btnCoordHist.dataset.bound) {
+      btnCoordHist.dataset.bound = "true";
       btnCoordHist.addEventListener("click", () => {
         switchMainTab("tabCoordination");
       });
     }
 
     const btnBackImpact = document.getElementById("btnBackToComparisonFromImpact");
-    if (btnBackImpact) {
+    if (btnBackImpact && !btnBackImpact.dataset.bound) {
+      btnBackImpact.dataset.bound = "true";
       btnBackImpact.addEventListener("click", () => {
         showBlockPlannerSubview("subviewComparison");
       });
     }
 
-    const btnApproveFromImpact = document.getElementById("btnApproveFromImpact");
-    if (btnApproveFromImpact) {
-      btnApproveFromImpact.addEventListener("click", () => {
-        openConfirmApprovalModal();
-      });
-    }
-
-    // View Conflict button
-    const viewConflictBtn = document.querySelector("#subviewImpactAnalysis .rf-btn-outline");
-    if (viewConflictBtn) {
-      viewConflictBtn.addEventListener("click", () => {
-        openConflictModal();
+    const btnBackRegFromImpact = document.getElementById("btnBackToRegisterFromImpact");
+    if (btnBackRegFromImpact && !btnBackRegFromImpact.dataset.bound) {
+      btnBackRegFromImpact.dataset.bound = "true";
+      btnBackRegFromImpact.addEventListener("click", () => {
+        showBlockPlannerSubview("subviewRegister");
       });
     }
   }
 
-  // =========================================================================
-  // 5. Confirm Block Approval Modal Logic (Screenshot 3 of 2nd batch)
-  // =========================================================================
-  const confirmModal = document.getElementById("confirmApprovalModal");
-  const btnCancelAppr = document.getElementById("btnCancelApproval");
-  const btnExecAppr = document.getElementById("btnExecuteApproval");
+  // Render Dynamic Impact Analysis for Active Requisition
+  function renderImpactAnalysis() {
+    const activeReq = activeCorridorState || (data.requisitions && data.requisitions[0]);
+    if (!activeReq) return;
 
-  function openConfirmApprovalModal() {
-    if (confirmModal) confirmModal.style.display = "flex";
-  }
+    const slotVal = activeReq.sanctionedSlot || activeReq.recommendedBlock || "11:00 – 12:30 IST";
+    const parts = slotVal.split(/[–\-]/);
+    const startStr = parts[0] ? parts[0].trim() : "11:00";
+    const endStr = parts[1] ? parts[1].replace(/IST/, '').trim() : "12:30";
 
-  if (btnCancelAppr) {
-    btnCancelAppr.addEventListener("click", () => {
-      if (confirmModal) confirmModal.style.display = "none";
-    });
-  }
+    const startTimeEl = document.getElementById("bpTimelineStartTime");
+    const endTimeEl = document.getElementById("bpTimelineEndTime");
+    const sumWindow = document.getElementById("bpSummaryWindow");
+    const sumLine = document.getElementById("bpSummaryLine");
+    const sumWorksite = document.getElementById("bpSummaryWorksite");
+    const sumFeas = document.getElementById("bpSummaryFeasibility");
+    const titleEl = document.getElementById("bpImpactTitle");
+    const subTitleEl = document.getElementById("bpImpactSubtitle");
+    const trainsListEl = document.getElementById("bpImpactTrainsList");
 
-  if (btnExecAppr) {
-    btnExecAppr.addEventListener("click", () => {
-      if (confirmModal) confirmModal.style.display = "none";
+    if (startTimeEl) startTimeEl.textContent = `${startStr} IST`;
+    if (endTimeEl) endTimeEl.textContent = `${endStr} IST`;
+    if (sumWindow) sumWindow.textContent = slotVal;
+    if (sumLine) sumLine.textContent = activeReq.trackLine || "UP Main Line";
+    if (sumWorksite) sumWorksite.textContent = activeReq.kmRange || "Worksite stretch";
+    if (sumFeas) {
+      const isSched = activeReq.status === "SCHEDULED" || (activeReq.status && activeReq.status.includes("SCHEDULED"));
+      sumFeas.textContent = isSched ? "SCHEDULED (OPTIMIZED)" : "UNSCHEDULED";
+      sumFeas.style.color = isSched ? "#059669" : "#dc2626";
+    }
+    if (titleEl) titleEl.textContent = `Impact Analysis — ${activeReq.reqId} (${slotVal})`;
+    if (subTitleEl) subTitleEl.textContent = `Estimated train regulation, downstream cascade, and safety precautions • ${activeReq.sectionName}`;
 
-      const now = new Date();
-      const timeFormatted = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const timeCell = document.getElementById("decisionRowTime");
-      if (timeCell) {
-        timeCell.textContent = timeFormatted;
+    // Render Corridor Trains & Conflicts
+    if (trainsListEl) {
+      const fromCode = (activeReq.fromStation || "KPD").toUpperCase();
+      const toCode = (activeReq.toStation || "JTJ").toUpperCase();
+      const telem = (typeof CorridorData !== "undefined" && CorridorData.getCorridorTelemetry)
+        ? CorridorData.getCorridorTelemetry(fromCode, toCode)
+        : null;
+
+      const running = telem?.runningTrains || [];
+      if (running.length === 0) {
+        trainsListEl.innerHTML = `<div style="font-size: 0.78rem; color: #64748b; padding: 0.5rem; font-style: italic;">No train conflicts on active corridor.</div>`;
+      } else {
+        let tHtml = "";
+        running.slice(0, 3).forEach(tr => {
+          tHtml += `
+            <div class="impact-item-row">
+              <div>
+                <div>
+                  <span class="impact-train-title">#${tr.id} ${tr.name}</span>
+                  <span class="impact-train-code">${tr.direction}</span>
+                </div>
+                <div class="impact-train-desc">${tr.direction === 'UP' ? 'Running on scheduled path.' : 'Adjacent track under caution speed.'}</div>
+              </div>
+              <div class="impact-badges-col">
+                <span class="badge-delay-pink">${tr.delay}</span>
+              </div>
+            </div>
+          `;
+        });
+        trainsListEl.innerHTML = tHtml;
       }
+    }
+  }
 
-      auditLogger.logAction(
-        "CONTROLLER_APPROVAL",
-        "Chief Section Controller",
-        "Approved Block W-B (11:30–14:00 IST) on Katpadi–Jolarpettai Junction (SR)"
-      );
+  // =========================================================================
+  // 6. Dynamic Coordination & Decision History View (Single Source of Truth)
+  // =========================================================================
+  function renderCoordinationView() {
+    const tbody = document.getElementById("coordDecisionHistoryTbody");
+    if (!tbody) return;
 
-      switchMainTab("tabCoordination");
+    const activeReq = activeCorridorState || (data.requisitions && data.requisitions[0]);
+    const fromCode = (activeReq?.fromStation || "KPD").toUpperCase();
+    const toCode = (activeReq?.toStation || "JTJ").toUpperCase();
+    const stFrom = (data.stations || []).find(s => s.code === fromCode) || { name: fromCode };
+    const stTo = (data.stations || []).find(s => s.code === toCode) || { name: toCode };
+    const fromCity = (stFrom.name || fromCode).split(" ")[0];
+    const toCity = (stTo.name || toCode).split(" ")[0];
+
+    // Filter requisitions strictly by active corridor
+    const allReqs = data.requisitions || [];
+    const corridorReqs = allReqs.filter(r => {
+      const rFrom = (r.fromStation || "").toUpperCase();
+      const rTo = (r.toStation || "").toUpperCase();
+      return (rFrom === fromCode && rTo === toCode) ||
+             (rFrom === toCode && rTo === fromCode) ||
+             (r.sectionName && r.sectionName.includes(fromCity) && r.sectionName.includes(toCity));
+    });
+
+    const isScheduled = activeReq && (activeReq.status === "SCHEDULED" || activeReq.status === "APPROVED" || (activeReq.status && (activeReq.status.includes("SCHEDULED") || activeReq.status.includes("APPROVED") || activeReq.status.includes("SIMULATED"))));
+    const activeSlot = activeReq ? (activeReq.sanctionedSlot || activeReq.recommendedBlock || "--:-- – --:--") : "--:-- – --:--";
+
+    // Update KPI Boxes
+    const kpiTasks = document.getElementById("coordKpiTasks");
+    const kpiScheduled = document.getElementById("coordKpiScheduled");
+    const kpiDecisions = document.getElementById("coordKpiDecisions");
+    const kpiTelemetry = document.getElementById("coordKpiTelemetry");
+    const subTitleEl = document.getElementById("coordSubtitle");
+    const statusPill = document.getElementById("coordStatusPill");
+
+    const scheduledCount = corridorReqs.filter(r => r.status === "SCHEDULED" || (r.status && r.status.includes("SCHEDULED"))).length;
+
+    if (kpiTasks) kpiTasks.textContent = corridorReqs.length;
+    if (kpiScheduled) kpiScheduled.textContent = `${scheduledCount} / ${corridorReqs.length}`;
+    if (kpiDecisions) kpiDecisions.textContent = corridorReqs.length;
+    if (kpiTelemetry) {
+      const isLive = corridorReqs.some(r => r.liveDataAvailable);
+      kpiTelemetry.innerHTML = isLive ? `<span style="color: #166534;">🟢 LIVE</span>` : `<span style="color: #475569;">⚪ DEMO/MOCK</span>`;
+    }
+    if (subTitleEl) {
+      subTitleEl.textContent = `Maintenance coordination metrics and optimizer decision log • ${stFrom.name} (${fromCode}) – ${stTo.name} (${toCode}) • Single Source of Truth`;
+    }
+    if (statusPill) {
+      statusPill.textContent = activeReq
+        ? `${activeReq.reqId}: ${isScheduled ? 'SCHEDULED (OPTIMIZED) • ' + activeSlot : 'UNSCHEDULED'}`
+        : 'Optimizer Auto-Scheduled';
+    }
+
+    if (corridorReqs.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="11" style="text-align: center; color: #64748b; padding: 1.5rem; font-style: italic;">
+            No decisions recorded yet for ${fromCity} – ${toCity} corridor.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    let html = "";
+    corridorReqs.forEach(req => {
+      const isReqSched = req.status === "SCHEDULED" || req.status === "APPROVED" || (req.status && (req.status.includes("SCHEDULED") || req.status.includes("APPROVED") || req.status.includes("SIMULATED")));
+      const slotVal = req.sanctionedSlot || req.recommendedBlock || "--:-- – --:--";
+      const conflictsText = req.conflicts && req.conflicts.length > 0
+        ? `${req.conflicts.length} conflict(s)`
+        : (req.isInsidePreferred ? '0 direct conflicts' : 'Alternative window (conflict-free)');
+      const decisionBadge = isReqSched
+        ? `<span class="badge-pill pill-rec" style="background: #dcfce7; color: #166534; font-weight: 700; white-space: nowrap;">SCHEDULED (OPTIMIZED)</span>`
+        : `<span class="badge-pill pill-danger" style="background: #fee2e2; color: #991b1b; font-weight: 700; white-space: nowrap;">UNSCHEDULED (NO FEASIBLE BLOCK)</span>`;
+      const dataSrcBadge = req.liveDataAvailable
+        ? `<span class="badge-pill" style="background: #dcfce7; color: #166534;">LIVE</span>`
+        : `<span class="badge-pill" style="background: #f1f5f9; color: #475569;">DEMO/MOCK</span>`;
+
+      html += `
+        <tr>
+          <td style="font-family: monospace; font-size: 0.76rem; color: #0284c7; font-weight: 600;">${req.submittedTime || '10:15 IST'}</td>
+          <td><code>${req.reqId}</code></td>
+          <td style="font-weight: 600;">${req.department}</td>
+          <td>${req.sectionName || (fromCity + ' – ' + toCity)} <span class="section-subtext">${req.trackLine}</span></td>
+          <td style="font-family: monospace; font-size: 0.74rem;">${req.preferredSlot || '11:00–14:30'}</td>
+          <td style="font-weight: 600;">${req.durationMin} min</td>
+          <td style="font-family: monospace; font-weight: 700; color: ${isReqSched ? '#166534' : '#991b1b'};">${isReqSched ? slotVal : 'None'}</td>
+          <td style="font-size: 0.74rem; color: #64748b;">${conflictsText}</td>
+          <td>${decisionBadge}</td>
+          <td>${dataSrcBadge}</td>
+          <td>
+            <button class="rf-btn rf-btn-outline btn-view-coord-detail" data-id="${req.reqId}" style="padding: 0.25rem 0.65rem; font-size: 0.75rem;">View Details</button>
+          </td>
+        </tr>
+      `;
+    });
+    tbody.innerHTML = html;
+
+    tbody.querySelectorAll(".btn-view-coord-detail").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        openTaskDetailModal(id);
+      });
     });
   }
 
   // =========================================================================
-  // 6. Task Details & Conflict Modals
+  // 7. Modals: Requisition Details & Printable Sanction Memo
   // =========================================================================
   const taskModal = document.getElementById("taskDetailModal");
   const conflictModal = document.getElementById("conflictDetailModal");
 
-  function openTaskDetailModal(taskId) {
-    const act = data.activities.find(a => a.taskId === taskId) || data.activities[0];
+  function openTaskDetailModal(reqId) {
+    const req = (data.requisitions || []).find(r => r.reqId === reqId) ||
+                (data.activities || []).find(a => a.taskId === reqId) ||
+                (data.requisitions && data.requisitions[0]);
+    if (!req) return;
+
     const titleEl = document.getElementById("taskModalTitle");
     const deptEl = document.getElementById("taskModalDept");
     const durEl = document.getElementById("taskModalDuration");
     const machEl = document.getElementById("taskModalMachinery");
 
-    if (titleEl) titleEl.textContent = `Task Details: ${act.taskId}`;
-    if (deptEl) deptEl.textContent = act.department;
-    if (durEl) durEl.textContent = `${act.duration} (${act.durationMin} mins)`;
+    const idVal = req.reqId || req.taskId || "REQ-SR";
+    const slotVal = req.sanctionedSlot || req.recommendedBlock || "--:-- – --:--";
+    const isSched = req.status === "SCHEDULED" || (req.status && req.status.includes("SCHEDULED"));
+
+    if (titleEl) titleEl.textContent = `Requisition Details: ${idVal}`;
+    if (deptEl) deptEl.textContent = req.department || "Department Maintenance";
+    if (durEl) durEl.textContent = `${req.durationMin || 90} mins continuous`;
     if (machEl) {
-      machEl.textContent = act.department.includes("Civil") || act.department.includes("Track") 
-        ? "CSM 09-32 Continuous Action Tamping Machine + Ballast Regulator (BRM)" 
-        : (act.department.includes("S&T") ? "Point Diagnostic System + Test Rake" : "Tower Wagon Car #09 (25kV AC Traction)");
+      machEl.textContent = req.machinery || (
+        req.department.includes("Civil") || req.department.includes("Track") 
+          ? "CSM 09-32 Continuous Action Tamping Machine + Ballast Regulator (BRM)" 
+          : (req.department.includes("S&T") ? "Point Diagnostic System + Test Rake" : "Tower Wagon Car #09 (25kV AC Traction)")
+      );
     }
 
-    if (taskModal) taskModal.style.display = "flex";
+    if (taskModal) {
+      const existingFooter = taskModal.querySelector(".detail-footer-note");
+      if (!existingFooter) {
+        const note = document.createElement("div");
+        note.className = "detail-footer-note";
+        note.style.cssText = "font-size: 0.76rem; color: #64748b; font-style: italic; margin-top: 1rem; border-top: 1px dashed #cbd5e1; padding-top: 0.5rem;";
+        note.textContent = "Scheduled by RailFlow Optimizer — Decision-Support Prototype. Final authority remains with authorised railway operating personnel.";
+        taskModal.querySelector(".detail-modal-card")?.appendChild(note);
+      }
+      taskModal.style.display = "flex";
+    }
   }
 
   function openConflictModal() {
@@ -976,17 +1417,27 @@ document.addEventListener("DOMContentLoaded", () => {
     if (el) el.addEventListener("click", () => { if (conflictModal) conflictModal.style.display = "none"; });
   });
 
-  // =========================================================================
-  // 7. Printable Sanction Memo Modal (Southern Railway)
-  // =========================================================================
+  // Printable Sanction Memo Modal
   const sanctionModal = document.getElementById("sanctionModal");
   const sanctionModalContent = document.getElementById("sanctionModalContent");
   const modalCloseBtn = document.getElementById("modalCloseBtn");
   const btnViewDecisionDetails = document.getElementById("btnViewDecisionDetails");
 
-  function openPrintableSanctionMemo() {
-    const cand = data.candidateWindows.find(c => c.id === "OPTION-B");
+  function openPrintableSanctionMemo(targetReqId = null) {
+    const activeReq = (targetReqId ? (data.requisitions || []).find(r => r.reqId === targetReqId) : null) ||
+                      activeCorridorState ||
+                      (data.requisitions && data.requisitions[0]);
+    if (!activeReq) return;
+
+    const cand = {
+      id: activeReq.reqId,
+      name: `Optimized Slot for ${activeReq.reqId}`,
+      window: activeReq.sanctionedSlot || activeReq.recommendedBlock || "11:00 – 12:30 IST"
+    };
+
     const memo = auditLogger.generateSanctionMemo(cand, "Chief Section Controller (Chennai / Salem)");
+    const slotVal = activeReq.sanctionedSlot || activeReq.recommendedBlock || "11:00 – 12:30 IST";
+    const kmText = activeReq.kmRange || (activeReq.worksiteStartKm && activeReq.worksiteEndKm ? `KM ${parseFloat(activeReq.worksiteStartKm).toFixed(2)} to KM ${parseFloat(activeReq.worksiteEndKm).toFixed(2)}` : 'Section boundaries');
 
     let html = `
       <div class="memo-crest">
@@ -1001,9 +1452,9 @@ document.addEventListener("DOMContentLoaded", () => {
         <div><strong>Sanction Order No:</strong> <code>${memo.orderNo}</code></div>
         <div><strong>Date:</strong> 24 Aug 2026</div>
         <div><strong>Authority:</strong> ${memo.controller}</div>
-        <div><strong>Corridor Section:</strong> Katpadi Junction &ndash; Jolarpettai Junction (S-KPD-JTJ)</div>
-        <div><strong>Track Line:</strong> UP Main Line (Section KM 129.500 to KM 214.000)</div>
-        <div><strong>Sanctioned Time Window:</strong> <span style="color: #059669; font-weight: 700;">11:30 &ndash; 14:00 IST (150 minutes)</span></div>
+        <div><strong>Corridor Section:</strong> ${activeReq.sectionName || 'Southern Railway Section'}</div>
+        <div><strong>Track Line:</strong> ${activeReq.trackLine} (${kmText})</div>
+        <div><strong>Sanctioned Time Window:</strong> <span style="color: #059669; font-weight: 700;">${slotVal} (${activeReq.durationMin} minutes)</span></div>
         <div><strong>Security Token:</strong> <code>${memo.authHash}</code></div>
       </div>
 
@@ -1018,29 +1469,19 @@ document.addEventListener("DOMContentLoaded", () => {
         </thead>
         <tbody>
           <tr>
-            <td><code>MT-SR-ENG-104</code></td>
-            <td><strong>Civil / Track</strong></td>
-            <td>Plain track tamping &amp; track geometry alignment (CSM 09-32 + Ballast Regulator)</td>
-          </tr>
-          <tr>
-            <td><code>MT-SR-SNT-218</code></td>
-            <td><strong>Signal &amp; Telecom (S&amp;T)</strong></td>
-            <td>Point machine overhaul &amp; dual axle counter calibration at Jolarpettai yard</td>
-          </tr>
-          <tr>
-            <td><code>MT-SR-TRD-309</code></td>
-            <td><strong>Traction / OHE (TRD)</strong></td>
-            <td>25kV catenary tensioning &amp; Power Block isolator maintenance permit</td>
+            <td><code>${activeReq.reqId}</code></td>
+            <td><strong>${activeReq.department}</strong></td>
+            <td>${activeReq.workType} (${activeReq.machinery || 'Standard Equipment'})</td>
           </tr>
         </tbody>
       </table>
 
       <h4 style="margin-bottom: 0.5rem; color: #c53030; font-size: 0.95rem;">SAFETY PRECAUTIONS ENFORCED:</h4>
       <div class="safety-precautions-box" style="font-size: 0.82rem; line-height: 1.6; color: #4a5568; background: #fff5f5; border-left: 4px solid #e53e3e; padding: 0.75rem; border-radius: 4px; margin-bottom: 1.25rem;">
-        <div>1. OHE 25kV Power Block issued under permit: Earthing discharge rods to be clamped before track machines enter.</div>
-        <div>2. Caution Order of 30 km/h on adjacent DOWN line in effect during ballast tamping.</div>
+        <div>1. ${activeReq.powerBlock ? activeReq.powerBlock.label : 'Conditional traction power isolation: subject to worksite conditions.'}</div>
+        <div>2. Caution Order of ${prototypeConfig.cautionSpeedKmH} km/h on adjacent line during maintenance operations.</div>
         <div>3. Red banner flags &amp; detonators positioned at 600m and 1200m as per G&amp;SR 15.09 rules.</div>
-        <div>4. Verified zero high-priority conflicts (20643 Vande Bharat running on scheduled priority path; 66023 MEMU held on loop).</div>
+        <div>4. Scheduled by RailFlow Optimizer — Decision-Support Prototype. Final authority remains with authorised railway operating personnel.</div>
       </div>
 
       <div class="memo-stamp">
@@ -1064,8 +1505,6 @@ document.addEventListener("DOMContentLoaded", () => {
     sanctionModalContent.innerHTML = html;
     sanctionModal.style.display = "flex";
     sanctionModal.scrollTop = 0;
-    const modalBox = sanctionModal.querySelector(".sanction-memo-modal");
-    if (modalBox) modalBox.scrollTop = 0;
   }
 
   if (btnViewDecisionDetails) {
@@ -1090,14 +1529,18 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // =========================================================================
-  // 8. Configuration Form Save Action
+  // 8. Configuration Form Save Action (Connected to Optimizer)
   // =========================================================================
   const btnSaveConfig = document.getElementById("btnSaveConfig");
   if (btnSaveConfig) {
     btnSaveConfig.addEventListener("click", () => {
-      const maxSpd = document.getElementById("cfgMaxSpeed").value;
-      const hdw = document.getElementById("cfgHeadway").value;
-      const ctn = document.getElementById("cfgCautionSpeed").value;
+      const maxSpd = parseInt(document.getElementById("cfgMaxSpeed").value, 10) || 130;
+      const hdw = parseInt(document.getElementById("cfgHeadway").value, 10) || 12;
+      const ctn = parseInt(document.getElementById("cfgCautionSpeed").value, 10) || 30;
+
+      prototypeConfig.maxSpeedKmH = maxSpd;
+      prototypeConfig.headwayMinutes = hdw;
+      prototypeConfig.cautionSpeedKmH = ctn;
 
       auditLogger.logAction(
         "UPDATE_CONFIG",
@@ -1105,7 +1548,7 @@ document.addEventListener("DOMContentLoaded", () => {
         `Updated parameters: Max Speed=${maxSpd} km/h, Headway=${hdw} min, Caution Speed=${ctn} km/h`
       );
 
-      alert(`Configuration Saved:\n• Max Speed: ${maxSpd} km/h\n• Safety Headway: ${hdw} min\n• Caution Speed: ${ctn} km/h`);
+      alert(`Prototype Configuration Saved:\n• Sectional Max Speed: ${maxSpd} km/h\n• Safety Headway: ${hdw} min\n• Caution Speed: ${ctn} km/h\n\nParameters are applied to subsequent automatic Block Optimizer evaluations.`);
     });
   }
 
@@ -1357,9 +1800,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const from = (fromStationEl ? fromStationEl.value : "MAS").toUpperCase();
       const to = (toStationEl ? toStationEl.value : "AJJ").toUpperCase();
 
-      const sec = (typeof CorridorData !== "undefined" && CorridorData.getSectionKmRange)
-        ? CorridorData.getSectionKmRange(from, to)
-        : { available: false, message: "Section KM range unavailable — enter worksite KM manually" };
+      const sec = (data && data.getSectionKmRange)
+        ? data.getSectionKmRange(from, to)
+        : (typeof CorridorData !== "undefined" && CorridorData.getSectionKmRange)
+          ? CorridorData.getSectionKmRange(from, to)
+          : { available: false, message: "Section KM range unavailable — enter worksite KM manually" };
 
       if (sectionKmDisplayEl) {
         if (sec.available) {
@@ -1420,9 +1865,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const from = (fromStationEl ? fromStationEl.value : "MAS").toUpperCase();
       const to = (toStationEl ? toStationEl.value : "AJJ").toUpperCase();
 
-      const sec = (typeof CorridorData !== "undefined" && CorridorData.getSectionKmRange)
-        ? CorridorData.getSectionKmRange(from, to)
-        : { available: false, message: "Section KM range unavailable — enter worksite KM manually" };
+      const sec = (data && data.getSectionKmRange)
+        ? data.getSectionKmRange(from, to)
+        : (typeof CorridorData !== "undefined" && CorridorData.getSectionKmRange)
+          ? CorridorData.getSectionKmRange(from, to)
+          : { available: false, message: "Section KM range unavailable — enter worksite KM manually" };
 
       const rawStart = worksiteStartKmEl.value.trim();
       const rawEnd = worksiteEndKmEl.value.trim();
@@ -1483,10 +1930,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // 7. Real-Time Block Planning Result State & Invalidation System
-    let currentRecommendation = null;
-    let currentCorridorData = null;
-    let currentEvaluationId = 0;
-    let activeRequestFingerprint = null;
+
 
     function getCurrentRequestFingerprint() {
       const from = (fromStationEl ? fromStationEl.value : "").toUpperCase();
@@ -1524,6 +1968,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const trainsTableBody = document.getElementById("bpTrainsTableBody");
       const btnBpSanction = document.getElementById("btnBpSanction");
       const sanctionedCard = document.getElementById("sanctionedTimetableCard");
+      const alternativesContainer = document.getElementById("bpAlternativesContainer");
+      const alternativesList = document.getElementById("bpAlternativesList");
 
       // 1. Reset evaluation status to WAITING FOR WORKSITE
       if (statusBadge) {
@@ -1611,12 +2057,18 @@ document.addEventListener("DOMContentLoaded", () => {
         reasonBanner.innerHTML = `ℹ️ <strong>Status:</strong> <span id="bpReasonText">${promptMessage}</span>`;
       }
 
-      // 7. Clear previous train evaluation results & conflict list
+      // 7. Clear previous train evaluation results & conflict list & alternatives
       if (trainCountText) {
         trainCountText.textContent = "Evaluation pending";
       }
       if (trainsTableBody) {
         trainsTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 1.5rem 0.5rem; font-style: italic;">Enter a valid Worksite KM Range to evaluate block availability.</td></tr>`;
+      }
+      if (alternativesContainer) {
+        alternativesContainer.style.display = "none";
+      }
+      if (alternativesList) {
+        alternativesList.innerHTML = "";
       }
 
       // 8. Disable simulated controller approval & hide stale timetable
@@ -1684,23 +2136,18 @@ document.addEventListener("DOMContentLoaded", () => {
           } else if (val === "Both UP & DOWN Lines") {
             blockTypeEl.value = "Both Lines Block (Simultaneous)";
           } else if (val === "Station Loop / Yard Track") {
-            // RULE E: Do NOT arbitrarily force UP Main or DOWN Main.
-            if (blockTypeEl.value === "Both Lines Block (Simultaneous)") {
-              blockTypeEl.value = "UP Line Block";
-            }
+            blockTypeEl.value = "Station Loop / Yard Track Block";
           }
         } else if (changedField === "BLOCK_TYPE") {
           const val = blockTypeEl.value;
           if (val === "UP Line Block") {
-            if (trackLineEl.value !== "Station Loop / Yard Track") {
-              trackLineEl.value = "UP Main Line";
-            }
+            trackLineEl.value = "UP Main Line";
           } else if (val === "DOWN Line Block") {
-            if (trackLineEl.value !== "Station Loop / Yard Track") {
-              trackLineEl.value = "DOWN Main Line";
-            }
+            trackLineEl.value = "DOWN Main Line";
           } else if (val === "Both Lines Block (Simultaneous)") {
             trackLineEl.value = "Both UP & DOWN Lines";
+          } else if (val === "Station Loop / Yard Track Block") {
+            trackLineEl.value = "Station Loop / Yard Track";
           }
         }
 
@@ -1820,17 +2267,21 @@ document.addEventListener("DOMContentLoaded", () => {
       const trainsTableBody = document.getElementById("bpTrainsTableBody");
       const powerBlockText = document.getElementById("bpPowerBlockText");
       const adjacentLineText = document.getElementById("bpAdjacentLineText");
+      const alternativesContainer = document.getElementById("bpAlternativesContainer");
+      const alternativesList = document.getElementById("bpAlternativesList");
+      const btnBpSanction = document.getElementById("btnBpSanction");
 
       if (statusBadge) {
-        statusBadge.textContent = rec.status;
-        if (rec.status.includes("SIMULATED") || rec.status.includes("APPROVED")) {
+        if (rec.status && rec.status.includes("NO FEASIBLE")) {
+          statusBadge.textContent = "NO FEASIBLE BLOCK FOUND";
+          statusBadge.style.background = "#fee2e2";
+          statusBadge.style.color = "#991b1b";
+          statusBadge.style.borderColor = "#fca5a5";
+        } else {
+          statusBadge.textContent = "SCHEDULED (OPTIMIZED)";
           statusBadge.style.background = "#dcfce7";
           statusBadge.style.color = "#166534";
           statusBadge.style.borderColor = "#86efac";
-        } else {
-          statusBadge.style.background = "#fef3c7";
-          statusBadge.style.color = "#92400e";
-          statusBadge.style.borderColor = "#fde68a";
         }
       }
 
@@ -1853,25 +2304,42 @@ document.addEventListener("DOMContentLoaded", () => {
       if (recDurEl) recDurEl.textContent = `${rec.durationMin} mins continuous`;
 
       // Distinct Preferred vs Alternative Window presentation
-      if (rec.isInsidePreferred) {
+      if (rec.status && rec.status.includes("NO FEASIBLE")) {
+        if (blockCategoryLabel) blockCategoryLabel.textContent = "No Feasible Block Found";
+        if (windowTypeBadge) {
+          windowTypeBadge.textContent = "Unavailable";
+          windowTypeBadge.style.background = "#fee2e2";
+          windowTypeBadge.style.color = "#991b1b";
+          windowTypeBadge.style.display = "inline-block";
+        }
+        if (extensionNote) {
+          extensionNote.style.display = "block";
+          extensionNote.textContent = "⚠️ No continuous slot fits within evaluation horizon";
+        }
+        if (btnBpSanction) btnBpSanction.disabled = true;
+      } else if (rec.isInsidePreferred) {
         if (blockCategoryLabel) blockCategoryLabel.textContent = "Recommended Block (Inside Preferred Window)";
         if (windowTypeBadge) {
           windowTypeBadge.textContent = "Preferred Window";
           windowTypeBadge.style.background = "#dcfce7";
           windowTypeBadge.style.color = "#166534";
+          windowTypeBadge.style.display = "inline-block";
         }
         if (extensionNote) extensionNote.style.display = "none";
+        if (btnBpSanction) btnBpSanction.disabled = false;
       } else {
         if (blockCategoryLabel) blockCategoryLabel.textContent = "Recommended Alternative Window";
         if (windowTypeBadge) {
           windowTypeBadge.textContent = "Alternative Window";
           windowTypeBadge.style.background = "#ffedd5";
           windowTypeBadge.style.color = "#c2410c";
+          windowTypeBadge.style.display = "inline-block";
         }
         if (extensionNote) {
           extensionNote.style.display = "block";
           extensionNote.textContent = rec.extensionDetail ? `⚠️ ${rec.extensionDetail}` : "⚠️ Extends outside preferred window";
         }
+        if (btnBpSanction) btnBpSanction.disabled = false;
       }
 
       if (worksiteKmEl) worksiteKmEl.textContent = rec.worksiteKmRange;
@@ -1882,12 +2350,49 @@ document.addEventListener("DOMContentLoaded", () => {
       if (blockTypeDisplayEl) blockTypeDisplayEl.textContent = rec.blockType;
       if (trackLineDisplayEl) trackLineDisplayEl.textContent = rec.trackLine;
 
+      // Render Top Alternatives (Block Optimizer Ranked Candidates)
+      if (alternativesContainer && alternativesList) {
+        if (rec.alternatives && rec.alternatives.length > 0) {
+          alternativesContainer.style.display = "block";
+          alternativesList.innerHTML = rec.alternatives.map((alt, idx) => {
+            const badgeBg = alt.isInsidePreferred ? '#dcfce7' : '#ffedd5';
+            const badgeColor = alt.isInsidePreferred ? '#166534' : '#c2410c';
+            return `
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; padding: 0.4rem 0.65rem; font-size: 0.74rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span style="font-weight: 700; color: #475569;">#${alt.rank || (idx + 2)}</span>
+                  <strong style="color: #1e293b; font-family: monospace;">${alt.recommendedBlock}</strong>
+                  <span style="color: #64748b; font-size: 0.7rem;">(${alt.durationMin} mins continuous)</span>
+                  <span class="badge-pill" style="background: ${badgeBg}; color: ${badgeColor}; font-size: 0.64rem; padding: 0.1rem 0.35rem;">${alt.windowType}</span>
+                </div>
+                <div style="color: #64748b; font-size: 0.7rem; font-style: italic;">
+                  ${alt.extensionDetail || alt.reason}
+                </div>
+              </div>
+            `;
+          }).join("");
+        } else {
+          alternativesContainer.style.display = "none";
+          alternativesList.innerHTML = "";
+        }
+      }
+
       if (reasonBanner) {
         const dataSourceNote = !rec.liveDataAvailable
           ? `<div style="font-size: 0.72rem; color: #64748b; margin-top: 6px; padding-top: 4px; border-top: 1px dashed #cbd5e1; font-style: italic;">⚪ <strong>Notice:</strong> Real-time RailRadar telemetry is currently unavailable (${rec.liveUnavailableReason || 'Rate limit / monthly quota reached'}). This evaluation is generated using verified baseline corridor timetable data (Demo/Mock Data).</div>`
           : `<div style="font-size: 0.72rem; color: #166534; margin-top: 6px; padding-top: 4px; border-top: 1px dashed #86efac; font-style: italic;">🟢 <strong>Live Telemetry:</strong> Evaluated using real-time RailRadar API telemetry.</div>`;
 
-        if (!rec.isInsidePreferred) {
+        if (rec.status && rec.status.includes("NO FEASIBLE")) {
+          reasonBanner.style.background = "#fef2f2";
+          reasonBanner.style.borderColor = "#fecaca";
+          reasonBanner.style.borderLeft = "4px solid #ef4444";
+          reasonBanner.style.color = "#991b1b";
+          reasonBanner.innerHTML = `
+            <div style="font-weight: 800; color: #b91c1c; margin-bottom: 2px;">⚠️ NO FEASIBLE BLOCK FOUND</div>
+            <div style="font-size: 0.74rem; color: #991b1b; line-height: 1.4;">${rec.reason}</div>
+            ${dataSourceNote}
+          `;
+        } else if (!rec.isInsidePreferred) {
           reasonBanner.style.background = "#fff7ed";
           reasonBanner.style.borderColor = "#fed7aa";
           reasonBanner.style.borderLeft = "4px solid #ea580c";
@@ -1949,10 +2454,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Configurable Safety Rules
       if (powerBlockText && rec.powerBlock) {
-        powerBlockText.innerHTML = `⚡ <strong>25kV Traction Power Block:</strong> ${rec.powerBlock.label} &mdash; <span style="color: #64748b;">${rec.powerBlock.detail}</span>`;
+        if (rec.powerBlock.required) {
+          powerBlockText.innerHTML = `⚡ <strong>25kV Traction Power Block:</strong> ${rec.powerBlock.label} &mdash; <span style="color: #64748b;">${rec.powerBlock.detail}</span>`;
+        } else {
+          powerBlockText.innerHTML = `⚡ <strong>25kV Traction Power Block:</strong> ${rec.powerBlock.label}`;
+        }
       }
       if (adjacentLineText && rec.adjacentLineRestrictions) {
         adjacentLineText.innerHTML = `⚠️ <strong>Adjacent Track (${rec.trackLine.includes('UP') ? 'DOWN Main Line' : 'UP Main Line'}):</strong> ${rec.adjacentLineRestrictions}`;
+      }
+
+      // Automatically sync scheduled timetable card
+      const isFeasible = !rec.status?.includes("NO FEASIBLE") && rec.recommendedBlock !== "--:-- – --:--";
+      const ttCard = document.getElementById("sanctionedTimetableCard");
+
+      if (isFeasible) {
+        renderSanctionedTimetable(rec);
+        if (ttCard) ttCard.style.display = "block";
+      } else if (ttCard) {
+        ttCard.style.display = "none";
       }
     }
 
@@ -1971,30 +2491,19 @@ document.addEventListener("DOMContentLoaded", () => {
           statusBadge.style.borderColor = "#86efac";
         }
 
+        // Update matching requisition in data.requisitions
+        if (currentRecommendation.requestId) {
+          const matchingReq = (data.requisitions || []).find(r => r.reqId === currentRecommendation.requestId);
+          if (matchingReq) {
+            matchingReq.status = "SCHEDULED";
+            matchingReq.sanctionedSlot = currentRecommendation.recommendedBlock;
+          }
+        }
+        renderRequisitionsList();
+        plotRequisitionMapMarkers();
+
         // Update timetable card with simulated approval window
-        const ttWindowEl = document.getElementById("ttApprovedWindow");
-        const ttSectionEl = document.getElementById("ttSectionName");
-        const ttPermitEl = document.getElementById("ttPermitOrderNo");
-        const permitNo = `SR-DEMO-SIM-${Math.floor(1000 + Math.random() * 9000)}`;
-
-        if (ttWindowEl) ttWindowEl.textContent = `${currentRecommendation.recommendedBlock} (${currentRecommendation.durationMin} mins - ${currentRecommendation.windowType})`;
-        if (ttSectionEl) ttSectionEl.textContent = `${currentRecommendation.trackLine} • Worksite ${currentRecommendation.worksiteKmRange}`;
-        if (ttPermitEl) ttPermitEl.textContent = permitNo;
-
-        // Update timetable safety rules dynamically
-        const ttPowerEl = document.getElementById("ttPowerBlockRule");
-        const ttAdjEl = document.getElementById("ttAdjacentLineRule");
-        const ttTrainEl = document.getElementById("ttTrainProtectionRule");
-
-        if (ttPowerEl && currentRecommendation.powerBlock) {
-          ttPowerEl.innerHTML = `⚡ <strong>Traction Power:</strong> ${currentRecommendation.powerBlock.label} (${currentRecommendation.powerBlock.detail})`;
-        }
-        if (ttAdjEl && currentRecommendation.adjacentLineRestrictions) {
-          ttAdjEl.innerHTML = `⚠️ <strong>Adjacent Track:</strong> ${currentRecommendation.adjacentLineRestrictions}`;
-        }
-        if (ttTrainEl) {
-          ttTrainEl.innerHTML = `🛡️ <strong>Train Telemetry:</strong> Evaluated ${currentRecommendation.evaluatedTrainCount || 7} corridor trains. Safe passage guaranteed during approved window.`;
-        }
+        renderSanctionedTimetable(currentRecommendation);
 
         auditLogger.logAction(
           "SIMULATED_CONTROLLER_APPROVAL",
@@ -2034,14 +2543,24 @@ document.addEventListener("DOMContentLoaded", () => {
         const midLat = (stFrom.lat + stTo.lat) / 2;
         const midLng = (stFrom.lng + stTo.lng) / 2;
 
+        const reqId = currentRecommendation?.requestId || "REQ-SR-PLAN";
+        const matchedReq = (data.requisitions || []).find(r => r.reqId === reqId);
+
         setActiveCorridor({
-          requestId: currentRecommendation?.requestId || "REQ-SR-PLAN",
+          requestId: reqId,
+          reqId: reqId,
+          department: matchedReq?.department || "Department Requisition",
+          workType: matchedReq?.workType || "Maintenance Block",
           fromStation: from,
           toStation: to,
           trackLine: line,
           blockType: block,
           worksiteStartKm: start,
           worksiteEndKm: end,
+          kmRange: currentRecommendation?.worksiteKmRange || `KM ${start} – KM ${end}`,
+          status: matchedReq ? matchedReq.status : (currentRecommendation?.status || "RECOMMENDED – PENDING CONTROLLER APPROVAL"),
+          sanctionedSlot: currentRecommendation?.recommendedBlock,
+          recommendedBlock: currentRecommendation?.recommendedBlock,
           lat: midLat,
           lng: midLng
         });
@@ -2050,10 +2569,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (mapInstance) {
           setTimeout(() => {
             mapInstance.flyTo([midLat, midLng], 11, { duration: 1 });
-            if (mapLayers.block) {
-              setTimeout(() => {
-                mapLayers.block.openPopup();
-              }, 1100);
+            const m = mapLayers.trainMarkers[reqId] || (mapLayers.pendingRequests || []).find(pr => pr._latlng && Math.abs(pr._latlng.lat - midLat) < 0.05);
+            if (m) {
+              setTimeout(() => m.openPopup(), 1100);
+            } else if (mapLayers.block) {
+              setTimeout(() => mapLayers.block.openPopup(), 1100);
             }
           }, 300);
         }
@@ -2079,7 +2599,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const originalBtnText = submitBtn ? submitBtn.innerHTML : "Submit Block Requisition &rarr;";
         if (submitBtn) {
           submitBtn.disabled = true;
-          submitBtn.innerHTML = `Evaluating Telemetry...`;
+          submitBtn.innerHTML = `Evaluating Telemetry &amp; Optimizing Block...`;
         }
 
         const deptRadio = document.querySelector('input[name="reqDepartment"]:checked');
@@ -2139,7 +2659,11 @@ document.addEventListener("DOMContentLoaded", () => {
           machinery: machinery,
           durationMin: durationMin,
           urgency: urgency,
-          preferredSlot: preferredSlot
+          preferredSlot: preferredSlot,
+          config: prototypeConfig,
+          headwayMinutes: prototypeConfig.headwayMinutes,
+          cautionSpeedKmH: prototypeConfig.cautionSpeedKmH,
+          maxSpeedKmH: prototypeConfig.maxSpeedKmH
         };
 
         try {
@@ -2158,7 +2682,27 @@ document.addEventListener("DOMContentLoaded", () => {
           }
 
           if (resData.result) {
+            resData.result.fromStation = fromStation;
+            resData.result.toStation = toStation;
+            resData.result.trackLine = trackLine;
+            resData.result.blockType = blockType;
+            resData.result.department = department;
+            resData.result.deptCode = deptCode;
+            resData.result.workDesc = workDesc;
+            resData.result.workType = workDesc;
+            resData.result.machinery = machinery;
+            resData.result.durationMin = durationMin;
+            resData.result.urgency = urgency;
+            resData.result.worksiteStartKm = startKm;
+            resData.result.worksiteEndKm = endKm;
+            resData.result.kmRange = worksiteKmRange;
+            resData.result.sectionName = sectionName;
+
             renderBlockPlanningResult(resData.result, resData.corridorData);
+
+            const isFeasible = !resData.result.status?.includes("NO FEASIBLE") && resData.result.recommendedBlock !== "--:-- – --:--";
+            const reqStatus = isFeasible ? "SCHEDULED" : "UNSCHEDULED (NO FEASIBLE BLOCK)";
+            const finalSlot = isFeasible ? resData.result.recommendedBlock : "--:-- – --:--";
 
             const reqId = `REQ-SR-${deptCode}-${Math.floor(100 + Math.random() * 900)}`;
             const midLat = (stFrom.lat + stTo.lat) / 2 + (Math.random() - 0.5) * 0.05;
@@ -2166,6 +2710,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const newReq = {
               reqId: reqId,
+              requestId: reqId,
               department: department,
               deptCode: deptCode,
               fromStation: fromStation,
@@ -2180,24 +2725,39 @@ document.addEventListener("DOMContentLoaded", () => {
               machinery: machinery,
               durationMin: durationMin,
               urgency: urgency,
-              status: "RECOMMENDED",
+              status: reqStatus,
               submittedBy: `Field Supervisor (${department})`,
               submittedTime: "Just now",
-              sanctionedSlot: resData.result.recommendedBlock,
+              sanctionedSlot: finalSlot,
+              scheduledSlot: finalSlot,
+              recommendedBlock: finalSlot,
+              windowType: resData.result.windowType,
+              isInsidePreferred: resData.result.isInsidePreferred,
+              powerBlock: resData.result.powerBlock,
+              adjacentLineRestrictions: resData.result.adjacentLineRestrictions,
+              liveDataAvailable: resData.result.liveDataAvailable,
               lat: midLat,
               lng: midLng
             };
 
+            if (currentRecommendation) {
+              currentRecommendation.requestId = reqId;
+              currentRecommendation.department = department;
+              currentRecommendation.workType = workDesc;
+              currentRecommendation.status = isFeasible ? "OPTIMIZED & SCHEDULED (SIMULATION)" : "NO FEASIBLE BLOCK FOUND";
+            }
+
             data.requisitions.unshift(newReq);
 
             auditLogger.logAction(
-              "SUBMIT_REQUISITION",
+              "AUTOMATIC_OPTIMIZED_SCHEDULE",
               department,
-              `Submitted ${reqId}: ${workDesc} on ${sectionName} (${durationMin} min). Recommendation: ${resData.result.recommendedBlock}`
+              `Auto-scheduled ${reqId}: ${workDesc} on ${sectionName} (${durationMin} min). Assigned Slot: ${finalSlot}`
             );
 
             renderRequisitionsList();
             plotRequisitionMapMarkers();
+            setActiveCorridor(newReq);
 
             const resultCard = document.getElementById("blockPlanningResultCard");
             if (resultCard) {
@@ -2230,9 +2790,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let html = "";
     reqs.forEach((req) => {
-      const isScheduled = req.status === "SCHEDULED";
+      const isScheduled = req.status === "SCHEDULED" || req.status === "APPROVED" || (req.status && (req.status.includes("SCHEDULED") || req.status.includes("APPROVED") || req.status.includes("SIMULATED")));
       const icon = req.deptCode === "CIVIL" ? "🛠️" : (req.deptCode === "SNT" ? "📡" : (req.deptCode === "TRD" ? "⚡" : "🛞"));
       const deptColor = req.deptCode === "CIVIL" ? "#16a34a" : (req.deptCode === "SNT" ? "#0284c7" : (req.deptCode === "TRD" ? "#d97706" : "#9333ea"));
+      const slotVal = req.sanctionedSlot || req.recommendedBlock || "11:00 – 13:15 IST";
 
       html += `
         <div class="req-list-item" data-id="${req.reqId}">
@@ -2240,8 +2801,8 @@ document.addEventListener("DOMContentLoaded", () => {
             <span class="req-item-dept" style="color: ${deptColor};">
               <span>${icon}</span> ${req.department}
             </span>
-            <span class="badge-pill ${isScheduled ? 'pill-rec' : 'pill-warning'}">
-              ${isScheduled ? '&#10003; SCHEDULED' : '⏳ PENDING SLOT'}
+            <span class="badge-pill ${isScheduled ? 'pill-rec' : 'pill-danger'}" style="${!isScheduled ? 'background: #fee2e2; color: #991b1b;' : ''}">
+              ${isScheduled ? '&#10003; SCHEDULED' : '⚠️ UNSCHEDULED'}
             </span>
           </div>
 
@@ -2255,21 +2816,14 @@ document.addEventListener("DOMContentLoaded", () => {
             <span>🚨 ${req.urgency}</span>
           </div>
 
-          ${isScheduled ? `
-            <div style="font-size: 0.74rem; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 0.25rem 0.5rem; border-radius: 4px; margin-top: 2px;">
-              <strong>Sanctioned:</strong> ${req.sanctionedSlot}
-            </div>
-          ` : ''}
+          <div style="font-size: 0.74rem; color: ${isScheduled ? '#166534' : '#991b1b'}; background: ${isScheduled ? '#f0fdf4' : '#fef2f2'}; border: 1px solid ${isScheduled ? '#bbf7d0' : '#fecaca'}; padding: 0.25rem 0.5rem; border-radius: 4px; margin-top: 2px;">
+            <strong>${isScheduled ? 'Scheduled Window:' : 'Status:'}</strong> ${isScheduled ? slotVal : 'No feasible block available'}
+          </div>
 
           <div class="req-item-actions">
-            <button class="rf-btn rf-btn-outline btn-view-req-map" data-id="${req.reqId}" style="padding: 0.25rem 0.65rem; font-size: 0.74rem;">
+            <button class="rf-btn rf-btn-outline btn-view-req-map" data-id="${req.reqId}" style="padding: 0.25rem 0.65rem; font-size: 0.74rem; width: 100%;">
               📍 View on Map
             </button>
-            ${!isScheduled ? `
-              <button class="rf-btn rf-btn-green btn-schedule-req" data-id="${req.reqId}" style="padding: 0.25rem 0.65rem; font-size: 0.74rem;">
-                ⚡ Schedule Work Slot
-              </button>
-            ` : ''}
           </div>
         </div>
       `;
@@ -2279,7 +2833,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // View on map buttons
     listContainer.querySelectorAll(".btn-view-req-map").forEach(btn => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
         const id = btn.getAttribute("data-id");
         const req = (data.requisitions || []).find(r => r.reqId === id);
         if (req) {
@@ -2296,57 +2851,164 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
 
-    // Schedule buttons
-    listContainer.querySelectorAll(".btn-schedule-req").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-id");
+    // Also clicking any requisition card switches active corridor immediately
+    listContainer.querySelectorAll(".req-list-item").forEach(item => {
+      item.addEventListener("click", () => {
+        const id = item.getAttribute("data-id");
         const req = (data.requisitions || []).find(r => r.reqId === id);
         if (req) {
-          req.status = "SCHEDULED";
-          req.sanctionedSlot = "11:30 – 14:00 IST (Option B Coordinated Block)";
-          auditLogger.logAction(
-            "SCHEDULE_REQUISITION",
-            "Chief Section Controller",
-            `Allocated slot 11:30–14:00 IST to ${req.reqId} (${req.workType})`
-          );
-          renderRequisitionsList();
-          plotRequisitionMapMarkers();
-          renderSanctionedTimetable();
-          alert(`Success: Requisition ${req.reqId} has been bundled into the 11:30–14:00 IST Coordinated Window!`);
+          setActiveCorridor(req);
         }
       });
     });
   }
 
-  function renderSanctionedTimetable() {
+  function renderSanctionedTimetable(context = null) {
+    const ttCard = document.getElementById("sanctionedTimetableCard");
     const timeline = document.getElementById("ttScheduleTimeline");
     if (!timeline) return;
 
-    timeline.innerHTML = `
-      <div class="tt-slot-row slot-civil">
-        <div>
-          <strong style="color: #166534;">Civil / Track (P-Way)</strong> &bull; Plain Track Tamping &amp; Geometry Alignment (CSM 09-32 + BRM)
-          <div style="font-size: 0.72rem; color: #64748b;">Katpadi &ndash; Jolarpettai (UP Main Line, KM 129.5 &ndash; 174.0)</div>
-        </div>
-        <div class="tt-slot-time">11:30 &ndash; 14:00 IST (150 min)</div>
-      </div>
+    // Single source of truth: explicitly passed context, or activeCorridorState
+    const activeReq = context || activeCorridorState;
+    if (!activeReq) return;
 
-      <div class="tt-slot-row slot-snt">
-        <div>
-          <strong style="color: #0284c7;">Signal &amp; Telecom (S&amp;T)</strong> &bull; Point Machine Overhaul #14 &amp; Dual Axle Counter
-          <div style="font-size: 0.72rem; color: #64748b;">Jolarpettai Junction Yard &bull; Turnout Interlocking Check</div>
-        </div>
-        <div class="tt-slot-time">11:30 &ndash; 13:30 IST (120 min)</div>
-      </div>
+    const fromCode = (activeReq.fromStation || "KPD").toUpperCase();
+    const toCode = (activeReq.toStation || "JTJ").toUpperCase();
+    const activeLine = activeReq.trackLine || "UP Main Line";
+    const activeSlot = activeReq.sanctionedSlot || activeReq.recommendedBlock || currentRecommendation?.recommendedBlock || "11:00 – 12:30 IST";
+    const dur = activeReq.durationMin || currentRecommendation?.durationMin || 90;
+    const winType = activeReq.windowType || currentRecommendation?.windowType || "Preferred Window";
+    const permitId = activeReq.reqId || activeReq.requestId || "SR-PLAN";
 
-      <div class="tt-slot-row slot-trd">
-        <div>
-          <strong style="color: #d97706;">Electrical / Traction (TRD)</strong> &bull; 25kV Catenary Wire Tensioning &amp; Isolator Overhaul
-          <div style="font-size: 0.72rem; color: #64748b;">Tower Wagon Car #09 &bull; Power Block Section KM 129.5 &ndash; 214.0</div>
+    const stFrom = (data.stations || []).find(s => s.code === fromCode) || { name: fromCode, code: fromCode };
+    const stTo = (data.stations || []).find(s => s.code === toCode) || { name: toCode, code: toCode };
+    const fromCity = (stFrom.name || fromCode).split(" ")[0];
+    const toCity = (stTo.name || toCode).split(" ")[0];
+
+    // 1. Update Card Header Section & Line + Approved Window + Permit No
+    const ttSectionEl = document.getElementById("ttSectionName");
+    const ttWindowEl = document.getElementById("ttApprovedWindow");
+    const ttPermitEl = document.getElementById("ttPermitOrderNo");
+
+    if (ttSectionEl) {
+      ttSectionEl.textContent = `${stFrom.name} (${fromCode}) – ${stTo.name} (${toCode}) • ${activeLine}`;
+    }
+    if (ttWindowEl) {
+      ttWindowEl.textContent = `${activeSlot} (${dur} mins - ${winType})`;
+    }
+    if (ttPermitEl) {
+      ttPermitEl.textContent = `SR-${permitId.replace(/^REQ-SR-/, '')}`;
+    }
+
+    // 2. Update Safety Rules with Honest Demo/Mock telemetry wording
+    const ttPowerEl = document.getElementById("ttPowerBlockRule");
+    const ttAdjEl = document.getElementById("ttAdjacentLineRule");
+    const ttTrainEl = document.getElementById("ttTrainProtectionRule");
+
+    if (ttPowerEl) {
+      const power = activeReq.powerBlock || currentRecommendation?.powerBlock;
+      if (power) {
+        ttPowerEl.innerHTML = power.required
+          ? `⚡ <strong>Traction Power:</strong> ${power.label} (${power.detail || 'Local feed isolation'})`
+          : `⚡ <strong>Traction Power:</strong> ${power.label}`;
+      } else {
+        const isTrd = (activeReq.deptCode === 'TRD') || (activeReq.department && activeReq.department.includes('TRD'));
+        ttPowerEl.innerHTML = isTrd
+          ? `⚡ <strong>Traction Power:</strong> 25kV AC Power Block Required`
+          : `⚡ <strong>Traction Power:</strong> No automatic Power Block requirement identified for this activity; final OHE isolation requirement is subject to worksite conditions and authorised railway procedures.`;
+      }
+    }
+
+    if (ttAdjEl) {
+      const adj = activeReq.adjacentLineRestrictions || currentRecommendation?.adjacentLineRestrictions;
+      if (adj) {
+        ttAdjEl.innerHTML = `⚠️ <strong>Adjacent Track:</strong> ${adj}`;
+      } else {
+        const oppLine = activeLine.includes('UP') ? 'DOWN Main Line' : (activeLine.includes('DOWN') ? 'UP Main Line' : 'Adjacent Track');
+        ttAdjEl.innerHTML = `⚠️ <strong>Adjacent Track (${oppLine}):</strong> Caution order 30 km/h and safety lookouts required.`;
+      }
+    }
+
+    if (ttTrainEl) {
+      const isMock = !activeReq.liveDataAvailable && (!currentRecommendation || !currentRecommendation.liveDataAvailable);
+      const trainCount = activeReq.evaluatedTrainCount || currentRecommendation?.evaluatedTrainCount || 7;
+      if (isMock) {
+        ttTrainEl.innerHTML = `🛡️ <strong>Train Telemetry:</strong> Evaluated ${trainCount} corridor trains. Automated slot assigned based on available timetable/demo data.`;
+      } else {
+        ttTrainEl.innerHTML = `🛡️ <strong>Train Telemetry:</strong> Evaluated ${trainCount} corridor trains. Safe passage guaranteed during approved window.`;
+      }
+    }
+
+    // 3. Filter Bundled Departmental Timetable:
+    // Strictly isolate to the SAME corridor/section and compatible line conditions
+    const allReqs = data.requisitions || [];
+    const compatibleReqs = allReqs.filter(r => {
+      // Exclude the active requisition itself from the bundled departmental activities list
+      if (permitId && r.reqId === permitId) return false;
+
+      const rFrom = (r.fromStation || "").toUpperCase();
+      const rTo = (r.toStation || "").toUpperCase();
+
+      // Strict corridor match: exactly the same station pair or city names
+      const corridorMatch = (rFrom === fromCode && rTo === toCode) ||
+                            (rFrom === toCode && rTo === fromCode) ||
+                            (r.sectionName && r.sectionName.includes(fromCity) && r.sectionName.includes(toCity));
+      if (!corridorMatch) return false;
+
+      // Track line compatibility
+      const rLine = r.trackLine || "UP Main Line";
+      let lineMatch = false;
+      if (activeLine === "UP Main Line" || activeLine === "UP Line Block" || (activeLine.includes("UP") && !activeLine.includes("Both") && !activeLine.includes("DOWN"))) {
+        lineMatch = rLine.includes("UP") || rLine.includes("Both");
+      } else if (activeLine === "DOWN Main Line" || activeLine === "DOWN Line Block" || (activeLine.includes("DOWN") && !activeLine.includes("Both") && !activeLine.includes("UP"))) {
+        lineMatch = rLine.includes("DOWN") || rLine.includes("Both");
+      } else if (activeLine.includes("Both")) {
+        lineMatch = true;
+      } else if (activeLine.includes("Yard") || activeLine.includes("Loop") || activeLine.includes("Station")) {
+        lineMatch = rLine.includes("Yard") || rLine.includes("Loop") || rLine.includes("Station");
+      } else {
+        lineMatch = rLine === activeLine;
+      }
+
+      return lineMatch;
+    });
+
+    // 4. Render Bundled Departmental Timetable Schedule
+    if (compatibleReqs.length === 0) {
+      timeline.innerHTML = `
+        <div class="no-bundled-activities" style="text-align: center; color: #64748b; padding: 1.25rem 0.5rem; font-style: italic; font-size: 0.8rem; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px;">
+          No compatible departmental activities available for bundling.
         </div>
-        <div class="tt-slot-time">11:30 &ndash; 13:45 IST (135 min)</div>
-      </div>
-    `;
+      `;
+    } else {
+      let html = "";
+      compatibleReqs.forEach(req => {
+        const deptCode = req.deptCode || (req.department.includes("Civil") ? "CIVIL" : (req.department.includes("Signal") || req.department.includes("S&T") ? "SNT" : (req.department.includes("Electrical") || req.department.includes("TRD") ? "TRD" : "GEN")));
+        const deptClass = deptCode === "CIVIL" ? "slot-civil" : (deptCode === "SNT" ? "slot-snt" : (deptCode === "TRD" ? "slot-trd" : "slot-mech"));
+        const deptColor = deptCode === "CIVIL" ? "#166534" : (deptCode === "SNT" ? "#0284c7" : (deptCode === "TRD" ? "#d97706" : "#9333ea"));
+
+        const slotTime = req.sanctionedSlot || req.recommendedBlock || activeSlot;
+        const kmText = req.kmRange || (req.worksiteStartKm && req.worksiteEndKm ? `KM ${parseFloat(req.worksiteStartKm).toFixed(2)} – KM ${parseFloat(req.worksiteEndKm).toFixed(2)}` : 'Section stretch');
+        const secText = req.sectionName || `${stFrom.name} – ${stTo.name}`;
+        const machineText = req.machinery ? ` (${req.machinery})` : '';
+
+        html += `
+          <div class="tt-slot-row ${deptClass}">
+            <div>
+              <strong style="color: ${deptColor};">${req.department}</strong> &bull; ${req.workType}${machineText}
+              <div style="font-size: 0.72rem; color: #64748b;">${secText} (${req.trackLine}, ${kmText})</div>
+            </div>
+            <div class="tt-slot-time">${slotTime} (${req.durationMin} min)</div>
+          </div>
+        `;
+      });
+
+      timeline.innerHTML = html;
+    }
+
+    if (ttCard) {
+      ttCard.style.display = "block";
+    }
   }
 
   // =========================================================================

@@ -44,7 +44,197 @@ class BlockOptimizationService {
   }
 
   /**
-   * Main Block Recommendation Algorithm
+   * Generates candidate continuous windows of requested duration within search horizon
+   * @param {Object} preferred { startMins, endMins, label }
+   * @param {number} durationMin continuous duration in minutes
+   * @param {number} searchHorizonMins total search horizon in minutes (default 1440 mins / 24h)
+   * @param {number} stepMin search increment in minutes (default 15 mins)
+   * @returns {Array} Array of candidate window objects
+   */
+  generateCandidateWindows(preferred, durationMin, searchHorizonMins = 1440, stepMin = 15) {
+    const candidates = [];
+    const minDayMins = 360; // 06:00 AM standard operational start
+    const maxDayMins = Math.min(searchHorizonMins, 1440) - durationMin;
+    const seenStartTimes = new Set();
+
+    // 1. Inside preferred window candidates first
+    for (let t = preferred.startMins; t + durationMin <= preferred.endMins; t += stepMin) {
+      if (!seenStartTimes.has(t)) {
+        seenStartTimes.add(t);
+        candidates.push({
+          startMins: t,
+          endMins: t + durationMin,
+          durationMin: durationMin,
+          isInsidePreferred: true,
+          startFormatted: this.minutesToTime(t),
+          endFormatted: this.minutesToTime(t + durationMin)
+        });
+      }
+    }
+
+    // 2. Forward search after preferred window
+    for (let t = preferred.endMins; t <= maxDayMins; t += stepMin) {
+      if (!seenStartTimes.has(t)) {
+        seenStartTimes.add(t);
+        const endMins = t + durationMin;
+        candidates.push({
+          startMins: t,
+          endMins: endMins,
+          durationMin: durationMin,
+          isInsidePreferred: false,
+          startFormatted: this.minutesToTime(t),
+          endFormatted: this.minutesToTime(endMins)
+        });
+      }
+    }
+
+    // 3. Backward search before preferred window across 24h search horizon
+    for (let t = minDayMins; t < preferred.startMins; t += stepMin) {
+      if (!seenStartTimes.has(t)) {
+        seenStartTimes.add(t);
+        const endMins = t + durationMin;
+        candidates.push({
+          startMins: t,
+          endMins: endMins,
+          durationMin: durationMin,
+          isInsidePreferred: false,
+          startFormatted: this.minutesToTime(t),
+          endFormatted: this.minutesToTime(endMins)
+        });
+      }
+    }
+
+    return candidates;
+  }
+
+  /**
+   * Evaluates if a candidate window has zero direct train conflicts and satisfies rules
+   * @param {Object} candidate Candidate window object
+   * @param {Array} trains Corridor trains list
+   * @param {string} trackLine Requested track line
+   * @param {string} blockType Requested block type
+   * @param {string} activityName Maintenance activity
+   * @param {string} machinery Machinery used
+   * @param {Object} config Configurable operational parameters
+   * @returns {Object} { feasible: boolean, evaluation: Object, conflicts: Array }
+   */
+  isCandidateFeasible(candidate, trains, trackLine, blockType, activityName = '', machinery = '', config = {}) {
+    const evaluation = conflictDetector.evaluateWindowConflicts(
+      candidate.startMins,
+      candidate.endMins,
+      trains,
+      trackLine,
+      blockType,
+      activityName,
+      machinery,
+      config
+    );
+
+    const isFeasible = !evaluation.hasConflict && candidate.durationMin >= 0;
+
+    return {
+      feasible: isFeasible,
+      evaluation: evaluation,
+      conflicts: evaluation.conflictingTrains || []
+    };
+  }
+
+  /**
+   * Scores a candidate window for deterministic ranking according to Section 5:
+   * Priority 1: Safety/Feasibility
+   * Priority 2: Full continuous duration
+   * Priority 3: Inside preferred window (true before false)
+   * Priority 4: Minimum deviation/extension from preferred window
+   * Priority 5: Minimum train disruption (fewer adjacent trains)
+   * Priority 6: Earliest feasible time
+   * @param {Object} candidate Candidate window
+   * @param {Object} preferred Preferred window range
+   * @param {number} requestedDuration Requested duration in minutes
+   * @returns {Object} Scored candidate window object
+   */
+  scoreCandidateWindow(candidate, preferred, requestedDuration) {
+    let deviationMins = 0;
+    let extensionMins = 0;
+    let extensionDetail = '';
+
+    if (candidate.isInsidePreferred) {
+      deviationMins = 0;
+      extensionMins = 0;
+      extensionDetail = 'Within requested preferred window';
+    } else {
+      if (candidate.endMins > preferred.endMins) {
+        extensionMins = candidate.endMins - preferred.endMins;
+        deviationMins = extensionMins;
+
+        if (candidate.startMins >= preferred.endMins) {
+          const startDiff = candidate.startMins - preferred.endMins;
+          extensionDetail = `Starts ${startDiff}m after preferred window; extends until ${candidate.endFormatted} IST (${extensionMins}m beyond ${this.minutesToTime(preferred.endMins)} cutoff)`;
+        } else {
+          extensionDetail = `Extends ${extensionMins} minutes beyond preferred window (ends at ${candidate.endFormatted} IST instead of ${this.minutesToTime(preferred.endMins)} IST)`;
+        }
+      } else if (candidate.startMins < preferred.startMins) {
+        extensionMins = preferred.startMins - candidate.startMins;
+        deviationMins = extensionMins;
+        extensionDetail = `Starts ${extensionMins} minutes before preferred window (at ${candidate.startFormatted} IST instead of ${this.minutesToTime(preferred.startMins)} IST)`;
+      } else {
+        deviationMins = 30;
+        extensionDetail = 'Outside requested preferred window boundaries';
+      }
+    }
+
+    const adjacentTrainCount = candidate.evaluation ? (candidate.evaluation.adjacentTrainCount || 0) : 0;
+
+    return {
+      ...candidate,
+      deviationMins,
+      extensionBeyondPreferredMins: extensionMins,
+      extensionDetail,
+      adjacentTrainCount
+    };
+  }
+
+  /**
+   * Deterministically ranks feasible candidate windows according to Section 5 priority rules
+   * @param {Array} feasibleCandidates Feasible candidates
+   * @param {Object} preferred Preferred window
+   * @param {number} requestedDuration Requested duration
+   * @returns {Array} Ranked candidate list
+   */
+  rankCandidateWindows(feasibleCandidates, preferred, requestedDuration) {
+    const scored = feasibleCandidates.map(c => this.scoreCandidateWindow(c, preferred, requestedDuration));
+
+    scored.sort((a, b) => {
+      // 1. Inside preferred window first
+      if (a.isInsidePreferred !== b.isInsidePreferred) {
+        return a.isInsidePreferred ? -1 : 1;
+      }
+      // 2. Minimum deviation / distance from preferred window
+      if (a.deviationMins !== b.deviationMins) {
+        return a.deviationMins - b.deviationMins;
+      }
+      // 3. Minimum train disruption (fewer adjacent trains)
+      if (a.adjacentTrainCount !== b.adjacentTrainCount) {
+        return a.adjacentTrainCount - b.adjacentTrainCount;
+      }
+      // 4. Earliest feasible start time
+      return a.startMins - b.startMins;
+    });
+
+    return scored;
+  }
+
+  /**
+   * Selects best candidate from ranked list
+   * @param {Array} rankedCandidates Ranked candidate list
+   * @returns {Object|null} Top candidate
+   */
+  selectBestCandidate(rankedCandidates) {
+    if (!rankedCandidates || rankedCandidates.length === 0) return null;
+    return rankedCandidates[0];
+  }
+
+  /**
+   * Main Block Recommendation Algorithm & Optimizer
    */
   findOptimalBlock(trainCorridorData, request) {
     const durationMin = parseInt(request.durationMin, 10) || 150;
@@ -53,63 +243,110 @@ class BlockOptimizationService {
     const activityName = request.activityName || request.workDesc || '';
     const machinery = request.machinery || '';
     const preferredWindowStr = request.preferredSlot || 'Midday Traffic Shadow (11:00–14:30)';
+    const config = request.config || {
+      headwayMinutes: request.headwayMinutes || request.headwayMarginMin,
+      cautionSpeedKmH: request.cautionSpeedKmH || request.adjacentLineCautionSpeed
+    };
 
     const preferred = this.parseWindowRange(preferredWindowStr);
     const trains = trainCorridorData.trains || [];
 
-    // STEP 7: Search for a continuous block equal to requested duration inside Preferred Window
-    let bestSlot = null;
-    const searchStep = 15; // 15-minute increment search
+    // STEP 1: Search for candidate continuous windows across 24h evaluation horizon
+    const rawCandidates = this.generateCandidateWindows(preferred, durationMin, 1440, 15);
 
-    for (let t = preferred.startMins; t + durationMin <= preferred.endMins; t += searchStep) {
-      const slotEnd = t + durationMin;
-      const evaluation = conflictDetector.evaluateWindowConflicts(
-        t,
-        slotEnd,
-        trains,
-        trackLine,
-        blockType,
-        activityName,
-        machinery
-      );
-
-      if (!evaluation.hasConflict) {
-        bestSlot = {
-          startMins: t,
-          endMins: slotEnd,
-          evaluation: evaluation,
-          isInsidePreferred: true
-        };
-        break; // Found feasible slot inside preferred window
+    // STEP 2: Evaluate feasibility for each candidate window
+    const feasibleCandidates = [];
+    for (const cand of rawCandidates) {
+      const feas = this.isCandidateFeasible(cand, trains, trackLine, blockType, activityName, machinery, config);
+      if (feas.feasible) {
+        feasibleCandidates.push({
+          ...cand,
+          evaluation: feas.evaluation
+        });
       }
     }
 
-    // If found inside preferred window:
-    if (bestSlot) {
-      const startFormatted = this.minutesToTime(bestSlot.startMins);
-      const endFormatted = this.minutesToTime(bestSlot.endMins);
+    // STEP 3: Evaluate conflicts within the requested preferred window for explainability
+    const preferredEvaluation = conflictDetector.evaluateWindowConflicts(
+      preferred.startMins,
+      preferred.endMins,
+      trains,
+      trackLine,
+      blockType,
+      activityName,
+      machinery,
+      config
+    );
 
+    // STEP 4: Rank candidates deterministically
+    const rankedCandidates = this.rankCandidateWindows(feasibleCandidates, preferred, durationMin);
+    const bestCandidate = this.selectBestCandidate(rankedCandidates);
+
+    // STEP 5: Format conflicting train details for clear explanation
+    const conflictDescriptions = preferredEvaluation.conflictingTrains.map((ct) => {
+      const pTime = ct.passageTime ? `${ct.passageTime.entryTimeFormatted}–${ct.passageTime.exitTimeFormatted}` : (ct.scheduledDeparture || 'in window');
+      const delayInfo = ct.delayMinutes > 0 ? ` (+${ct.delayMinutes}m delay)` : '';
+      return `Train #${ct.trainNumber} (${ct.trainName} at ${pTime}${delayInfo})`;
+    });
+
+    const conflictSummary = conflictDescriptions.length > 0
+      ? conflictDescriptions.join(', ')
+      : 'train movements in corridor';
+
+    // Top 2-3 alternatives (excluding the optimal primary candidate)
+    const alternativeCandidates = rankedCandidates.slice(1, 4).map((alt, idx) => ({
+      rank: idx + 2,
+      recommendedBlock: `${alt.startFormatted} – ${alt.endFormatted} IST`,
+      startMins: alt.startMins,
+      endMins: alt.endMins,
+      durationMin: alt.durationMin,
+      isInsidePreferred: alt.isInsidePreferred,
+      windowType: alt.isInsidePreferred ? 'Preferred Window' : 'Alternative Window',
+      extensionBeyondPreferredMins: alt.extensionBeyondPreferredMins,
+      extensionDetail: alt.extensionDetail,
+      adjacentTrainCount: alt.adjacentTrainCount,
+      reason: alt.isInsidePreferred
+        ? (trainCorridorData.liveDataAvailable
+            ? 'Feasible continuous block identified inside the preferred maintenance window without train disruption.'
+            : 'Feasible continuous block identified using available timetable/demo data.')
+        : `Alternative feasible window (${alt.extensionDetail}).`
+    }));
+
+    // If NO feasible candidate found anywhere in the search horizon:
+    if (!bestCandidate) {
       return {
-        status: 'RECOMMENDED – PENDING CONTROLLER APPROVAL',
+        status: 'NO FEASIBLE BLOCK FOUND',
         authorizationLevel: 'Decision Support Advisory Recommendation (Prototype Simulation — Statutory approval requires Chief Section Controller via COA)',
         requestedWindow: preferred.label,
-        recommendedBlock: `${startFormatted} – ${endFormatted} IST`,
-        startMins: bestSlot.startMins,
-        endMins: bestSlot.endMins,
+        requestedDurationMin: durationMin,
+        recommendedBlock: '--:-- – --:--',
+        selectedCandidate: null,
+        scheduledSlot: null,
+        startMins: null,
+        endMins: null,
         durationMin: durationMin,
         trackLine: trackLine,
         blockType: blockType,
         worksiteKmRange: request.worksiteKmRange || `${trainCorridorData.worksiteStartKm} – ${trainCorridorData.worksiteEndKm}`,
-        conflictingTrains: [],
-        conflictCount: 0,
-        isInsidePreferred: true,
-        windowType: 'Preferred Window',
-        preferredWindowStatus: 'FEASIBLE',
+        conflictingTrains: preferredEvaluation.conflictingTrains.map((ct) => ({
+          trainNumber: ct.trainNumber,
+          trainName: ct.trainName,
+          scheduledPassage: ct.passageTime ? `${ct.passageTime.entryTimeFormatted} – ${ct.passageTime.exitTimeFormatted}` : ct.scheduledDeparture,
+          delayMinutes: ct.delayMinutes,
+          status: ct.status,
+          type: ct.type
+        })),
+        conflictCount: preferredEvaluation.conflictingTrains.length,
+        conflicts: preferredEvaluation.conflictingTrains,
+        isInsidePreferred: false,
+        windowType: 'No Feasible Window',
+        preferredWindowStatus: 'No feasible block available within preferred window or 24h evaluation horizon.',
         extensionBeyondPreferredMins: 0,
-        extensionDetail: 'Within requested preferred window',
-        reason: 'Feasible continuous block identified within preferred maintenance window without train disruption.',
-        adjacentLineRestrictions: bestSlot.evaluation.adjacentLineRestrictions,
-        powerBlock: bestSlot.evaluation.powerBlock,
+        extensionDetail: 'No feasible slot available in corridor.',
+        reason: `No feasible continuous block of ${durationMin} minutes could be found within the 24-hour evaluation horizon due to dense corridor traffic and train conflicts (${conflictSummary}).`,
+        alternatives: [],
+        adjacentLineRestrictions: 'Adjacent track subject to operational and safety restrictions.',
+        powerBlock: preferredEvaluation.powerBlock,
         liveDataAvailable: trainCorridorData.liveDataAvailable,
         liveStatusText: trainCorridorData.liveStatusText,
         timetableStatusText: trainCorridorData.timetableStatusText,
@@ -119,108 +356,56 @@ class BlockOptimizationService {
       };
     }
 
-    // STEP 9: If NOT feasible inside preferred window, collect conflicts in preferred window
-    const preferredEvaluation = conflictDetector.evaluateWindowConflicts(
-      preferred.startMins,
-      preferred.endMins,
-      trains,
-      trackLine,
-      blockType,
-      activityName,
-      machinery
-    );
-
-    // Search outside preferred window starting from closest to preferred window
-    let alternativeSlot = null;
-    const maxDayMins = 1440 - durationMin;
-    const minDayMins = 360; // 06:00 AM
-
-    // Generate candidate start times sorted by distance to preferred window
-    const candidateTimes = [];
-    for (let t = minDayMins; t <= maxDayMins; t += searchStep) {
-      candidateTimes.push(t);
-    }
-    candidateTimes.sort((a, b) => {
-      const distA = a < preferred.startMins ? (preferred.startMins - a) : Math.max(0, a - preferred.endMins);
-      const distB = b < preferred.startMins ? (preferred.startMins - b) : Math.max(0, b - preferred.endMins);
-      return distA - distB;
-    });
-
-    for (const t of candidateTimes) {
-      const slotEnd = t + durationMin;
-      const evaluation = conflictDetector.evaluateWindowConflicts(
-        t,
-        slotEnd,
-        trains,
-        trackLine,
-        blockType,
-        activityName,
-        machinery
-      );
-
-      if (!evaluation.hasConflict) {
-        alternativeSlot = {
-          startMins: t,
-          endMins: slotEnd,
-          evaluation: evaluation
-        };
-        break;
-      }
+    // CASE A: Feasible Inside Preferred Window
+    if (bestCandidate.isInsidePreferred) {
+      return {
+        status: 'OPTIMIZED BLOCK SCHEDULE – RECOMMENDED – PENDING CONTROLLER APPROVAL',
+        authorizationLevel: 'Decision Support Advisory Recommendation (Prototype Simulation — Statutory approval requires Chief Section Controller via COA)',
+        requestedWindow: preferred.label,
+        requestedDurationMin: durationMin,
+        recommendedBlock: `${bestCandidate.startFormatted} – ${bestCandidate.endFormatted} IST`,
+        selectedCandidate: `${bestCandidate.startFormatted} – ${bestCandidate.endFormatted} IST`,
+        scheduledSlot: `${bestCandidate.startFormatted} – ${bestCandidate.endFormatted} IST`,
+        startMins: bestCandidate.startMins,
+        endMins: bestCandidate.endMins,
+        durationMin: durationMin,
+        trackLine: trackLine,
+        blockType: blockType,
+        worksiteKmRange: request.worksiteKmRange || `${trainCorridorData.worksiteStartKm} – ${trainCorridorData.worksiteEndKm}`,
+        conflictingTrains: [],
+        conflicts: [],
+        conflictCount: 0,
+        isInsidePreferred: true,
+        windowType: 'Preferred Window',
+        preferredWindowStatus: 'FEASIBLE',
+        extensionBeyondPreferredMins: 0,
+        extensionDetail: 'Within requested preferred window',
+        reason: trainCorridorData.liveDataAvailable
+          ? 'Feasible continuous block identified inside the preferred maintenance window without train disruption.'
+          : 'Feasible continuous block identified using available timetable/demo data.',
+        alternatives: alternativeCandidates,
+        adjacentLineRestrictions: bestCandidate.evaluation.adjacentLineRestrictions,
+        powerBlock: bestCandidate.evaluation.powerBlock,
+        liveDataAvailable: trainCorridorData.liveDataAvailable,
+        liveStatusText: trainCorridorData.liveStatusText,
+        timetableStatusText: trainCorridorData.timetableStatusText,
+        dataSource: trainCorridorData.dataSource,
+        liveUnavailableReason: trainCorridorData.liveUnavailableReason,
+        evaluatedTrainCount: trains.length
+      };
     }
 
-    // If still no slot, fallback to default alternative
-    const altStartMins = alternativeSlot ? alternativeSlot.startMins : 900; // 15:00
-    const altEndMins = alternativeSlot ? alternativeSlot.endMins : 900 + durationMin;
-    const altEval = alternativeSlot
-      ? alternativeSlot.evaluation
-      : conflictDetector.evaluateWindowConflicts(
-          altStartMins,
-          altEndMins,
-          trains,
-          trackLine,
-          blockType,
-          activityName,
-          machinery
-        );
-
-    const altStartFormatted = this.minutesToTime(altStartMins);
-    const altEndFormatted = this.minutesToTime(altEndMins);
-
-    // Calculate extension beyond preferred window
-    let extensionMins = 0;
-    let extensionDetail = '';
-    if (altEndMins > preferred.endMins) {
-      extensionMins = altEndMins - preferred.endMins;
-      if (altStartMins >= preferred.endMins) {
-        const startDiff = altStartMins - preferred.endMins;
-        extensionDetail = `Starts ${startDiff}m after preferred window; extends until ${altEndFormatted} IST (${extensionMins}m beyond ${this.minutesToTime(preferred.endMins)} cutoff)`;
-      } else {
-        extensionDetail = `Extends ${extensionMins} minutes beyond preferred window (ends at ${altEndFormatted} IST instead of ${this.minutesToTime(preferred.endMins)} IST)`;
-      }
-    } else if (altStartMins < preferred.startMins) {
-      extensionMins = preferred.startMins - altStartMins;
-      extensionDetail = `Starts ${extensionMins} minutes before preferred window (at ${altStartFormatted} IST instead of ${this.minutesToTime(preferred.startMins)} IST)`;
-    } else {
-      extensionDetail = 'Outside requested preferred window boundaries';
-    }
-
-    const conflictDescriptions = preferredEvaluation.conflictingTrains.map((ct) => {
-      const pTime = ct.passageTime ? `${ct.passageTime.entryTimeFormatted}–${ct.passageTime.exitTimeFormatted}` : 'in window';
-      const delayInfo = ct.delayMinutes > 0 ? ` (+${ct.delayMinutes}m delay)` : '';
-      return `Train #${ct.trainNumber} (${ct.trainName} at ${pTime}${delayInfo})`;
-    });
-
-    const conflictSummary = conflictDescriptions.length > 0
-      ? conflictDescriptions.join(', ')
-      : 'train movements in corridor';
-
+    // CASE B: Not Feasible Inside Preferred Window -> Recommended Alternative Window
     return {
-      status: 'RECOMMENDED – PENDING CONTROLLER APPROVAL',
+      status: 'OPTIMIZED BLOCK SCHEDULE – RECOMMENDED – PENDING CONTROLLER APPROVAL',
       authorizationLevel: 'Decision Support Advisory Recommendation (Prototype Simulation — Statutory approval requires Chief Section Controller via COA)',
       requestedWindow: preferred.label,
-      recommendedBlock: `${altStartFormatted} – ${altEndFormatted} IST`,
-      startMins: altStartMins,
-      endMins: altEndMins,
+      requestedDurationMin: durationMin,
+      recommendedBlock: `${bestCandidate.startFormatted} – ${bestCandidate.endFormatted} IST`,
+      selectedCandidate: `${bestCandidate.startFormatted} – ${bestCandidate.endFormatted} IST`,
+      scheduledSlot: `${bestCandidate.startFormatted} – ${bestCandidate.endFormatted} IST`,
+      startMins: bestCandidate.startMins,
+      endMins: bestCandidate.endMins,
       durationMin: durationMin,
       trackLine: trackLine,
       blockType: blockType,
@@ -234,14 +419,16 @@ class BlockOptimizationService {
         type: ct.type
       })),
       conflictCount: preferredEvaluation.conflictingTrains.length,
+      conflicts: preferredEvaluation.conflictingTrains,
       isInsidePreferred: false,
       windowType: 'Alternative Window',
       preferredWindowStatus: 'No feasible block available within preferred window.',
-      extensionBeyondPreferredMins: extensionMins,
-      extensionDetail: extensionDetail,
-      reason: `No feasible block available within preferred window (${preferred.label}) due to train conflict with ${conflictSummary}. Recommended Alternative Window: ${altStartFormatted} – ${altEndFormatted} IST (${extensionDetail}).`,
-      adjacentLineRestrictions: altEval.adjacentLineRestrictions,
-      powerBlock: altEval.powerBlock,
+      extensionBeyondPreferredMins: bestCandidate.extensionBeyondPreferredMins,
+      extensionDetail: bestCandidate.extensionDetail,
+      reason: `No feasible block available within preferred window (${preferred.label}) due to train conflict with ${conflictSummary}. Recommended Alternative Window: ${bestCandidate.startFormatted} – ${bestCandidate.endFormatted} IST (${bestCandidate.extensionDetail}).`,
+      alternatives: alternativeCandidates,
+      adjacentLineRestrictions: bestCandidate.evaluation.adjacentLineRestrictions,
+      powerBlock: bestCandidate.evaluation.powerBlock,
       liveDataAvailable: trainCorridorData.liveDataAvailable,
       liveStatusText: trainCorridorData.liveStatusText,
       timetableStatusText: trainCorridorData.timetableStatusText,

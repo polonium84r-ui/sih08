@@ -1,0 +1,19 @@
+{
+  "name": "railflow",
+  "version": "1.0.0",
+  "description": "RailFlow: Smarter Railway Maintenance Block Planning & Coordinated Mega-Block Decision Support System (SIH 2026)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "railways",
+    "maintenance-planning",
+    "decision-support",
+    "smart-india-hackathon",
+    "sih2026",
+    "railflow"
+  ],
+  "author": "Team CodeSmiths",
+  "license": "MIT"
+}

@@ -3,10 +3,13 @@
   "version": "1.0.0-mvp",
   "description": "RailFlow: Smarter Railway Maintenance Block Planning & Coordinated Mega-Block Decision Support System (MVP)",
   "scripts": {
-    "start": "node backend/src/server.js",
+    "dev": "concurrently -k -n \"backend,frontend\" -c \"blue.bold,cyan.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "start": "concurrently -k -n \"backend,frontend\" -c \"blue.bold,cyan.bold\" \"npm run start:backend\" \"npm run preview:frontend\"",
+    "start:backend": "node backend/src/server.js",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
     "build:frontend": "cd frontend && npm run build",
+    "preview:frontend": "cd frontend && npm run preview",
     "test:backend": "cd backend && npm test",
     "test": "cd backend && npm test",
     "install:all": "cd backend && npm install && cd ../frontend && npm install",
@@ -25,5 +28,8 @@
     "mvp"
   ],
   "author": "Team CodeSmiths",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
 }

@@ -118,11 +118,12 @@ Synchronize Single Source of Truth Across All Views:
 
 2. **Start Backend & Frontend Services:**
    ```bash
-   # Terminal 1: Start Backend API (Port 5000)
-   npm run dev:backend
+   # Run both Backend API and Frontend Dev Server together in a SINGLE terminal:
+   npm run dev
 
-   # Terminal 2: Start Frontend Dev Server (Port 3000)
-   npm run dev:frontend
+   # (Alternatively, run individually if needed):
+   # npm run dev:backend    # Backend on Port 5000
+   # npm run dev:frontend   # Frontend on Port 3000
    ```
    *Access the web application at:* `http://localhost:3000`  
    *API Swagger / Health Endpoint:* `http://localhost:5000/api/health`

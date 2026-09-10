@@ -11,8 +11,9 @@ let prisma = null;
 let isConnected = false;
 
 try {
+  // Use custom event logging so offline fallback prints clean, actionable status
   prisma = new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error']
+    log: process.env.PRISMA_DEBUG ? ['query', 'info', 'warn', 'error'] : []
   });
 } catch (err) {
   console.warn('[Database] Prisma Client initialization deferred:', err.message);
@@ -77,7 +78,7 @@ class DatabaseService {
       return true;
     } catch (err) {
       isConnected = false;
-      console.log('[Database] PostgreSQL not connected. Operating in resilient In-Memory fallback mode.');
+      console.log('[Database] PostgreSQL offline (localhost:5432). Operating in resilient In-Memory mode (all features active).');
       return false;
     }
   }

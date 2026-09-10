@@ -1,15 +1,3 @@
-/**
- * Comprehensive State-Synchronization Verification Suite
- * Tests:
- * 1. Frontend Line & Block sync rules A, B, C, D, E & invalidation
- * 2. Backend validation: HTTP 200 for valid pairs, HTTP 400 INVALID_LINE_BLOCK_TYPE for contradictory pairs
- * 3. Exact value preservation of "Both Lines Block (Simultaneous)"
- * 4. Map & Dashboard Corridor synchronization: CBE->ED vs KPD->JTJ isolation
- * 5. Rapid switching anti-stale protection
- * 6. Honest telemetry labeling
- * 7. End-to-end Cross-Component Consistency for REQ-SR-TRD-943
- */
-
 const http = require('http');
 const CorridorData = require('d:/clone/js/corridor_data');
 
@@ -45,8 +33,6 @@ function makeRequest(path, method = 'GET', body = null) {
     req.end();
   });
 }
-
-// Simulated frontend synchronization logic matching js/app.js syncTrackLineAndBlockType
 function simulateFrontendSync(changedField, initialTrackLine, initialBlockType) {
   let trackLine = initialTrackLine;
   let blockType = initialBlockType;
@@ -98,10 +84,7 @@ async function runSuite() {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // PART 16 — TEST TRACK/BLOCK SYNCHRONIZATION
-  // -------------------------------------------------------------------------
-  console.log('--- SECTION 1: Frontend & Backend Track Line / Block Type Sync ---');
+     console.log('--- SECTION 1: Frontend & Backend Track Line / Block Type Sync ---');
 
   // TEST 1: Track Line = UP Main Line
   const t1 = simulateFrontendSync("TRACK_LINE", "UP Main Line", "DOWN Line Block");

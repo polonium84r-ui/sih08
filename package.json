@@ -1,10 +1,19 @@
 {
-  "name": "railflow",
-  "version": "1.0.0",
-  "description": "RailFlow: Smarter Railway Maintenance Block Planning & Coordinated Mega-Block Decision Support System (SIH 2026)",
-  "main": "server.js",
+  "name": "railflow-workspace",
+  "version": "1.0.0-mvp",
+  "description": "RailFlow: Smarter Railway Maintenance Block Planning & Coordinated Mega-Block Decision Support System (MVP)",
   "scripts": {
-    "start": "node server.js"
+    "start": "node backend/src/server.js",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "test:backend": "cd backend && npm test",
+    "test": "cd backend && npm test",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:generate": "cd backend && npm run db:generate",
+    "db:seed": "cd backend && npm run db:seed"
   },
   "keywords": [
     "railways",
@@ -12,7 +21,8 @@
     "decision-support",
     "smart-india-hackathon",
     "sih2026",
-    "railflow"
+    "railflow",
+    "mvp"
   ],
   "author": "Team CodeSmiths",
   "license": "MIT"

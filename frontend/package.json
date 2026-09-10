@@ -1,0 +1,24 @@
+{
+  "name": "railflow-frontend",
+  "version": "1.0.0",
+  "description": "RailFlow Enterprise Frontend - Southern Railway Maintenance Block Planning Decision Support System",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "railflow",
+    "railways",
+    "frontend",
+    "vite",
+    "leaflet",
+    "sih2026"
+  ],
+  "author": "Team CodeSmiths",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^5.4.14"
+  }
+}

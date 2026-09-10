@@ -12,31 +12,36 @@ const CorridorData = {
   currentTime: "10:12 IST",
 
   // Geographical Coordinates for Tamil Nadu Railway Network on Leaflet Map
-  stations: [
-    // 1. Chennai - Coimbatore Trunk Route (Western Tamil Nadu)
-    { code: "MAS", name: "Puratchi Thalaivar Dr. M.G.R. Chennai Central", km: 0.0, lat: 13.0827, lng: 80.2707, loops: 12, division: "Chennai" },
-    { code: "AJJ", name: "Arakkonam Junction", km: 68.6, lat: 13.0783, lng: 79.6687, loops: 6, division: "Chennai" },
-    { code: "KPD", name: "Katpadi Junction (Vellore)", km: 129.6, lat: 12.9698, lng: 79.1378, loops: 6, division: "Chennai" },
-    { code: "JTJ", name: "Jolarpettai Junction", km: 214.1, lat: 12.5594, lng: 78.5746, loops: 8, division: "Chennai" },
-    { code: "MAP", name: "Morappur", km: 268.5, lat: 12.1287, lng: 78.3842, loops: 4, division: "Salem" },
-    { code: "SA", name: "Salem Junction", km: 334.2, lat: 11.6643, lng: 78.1460, loops: 6, division: "Salem" },
-    { code: "ED", name: "Erode Junction", km: 394.0, lat: 11.3410, lng: 77.7172, loops: 7, division: "Salem" },
-    { code: "TUP", name: "Tiruppur", km: 444.2, lat: 11.1085, lng: 77.3411, loops: 4, division: "Salem" },
-    { code: "CBE", name: "Coimbatore Junction", km: 494.4, lat: 11.0016, lng: 76.9628, loops: 6, division: "Salem" },
+  // Authentic Southern Railway Track Geometry (OpenStreetMap Network Topology)
+  // High-precision tracks extracted from OpenStreetMap railway=rail network
+  trackGeometry: (typeof TrackGeometry !== "undefined")
+    ? TrackGeometry
+    : (function() {
+        try { return require('./track_geometry.js'); } catch(e) { return {}; }
+      })(),
 
-    // 2. Chennai - Madurai - Kanyakumari Chord Route (Central & Southern Tamil Nadu)
-    { code: "MS", name: "Chennai Egmore", km: 2.1, lat: 13.0784, lng: 80.2612, loops: 10, division: "Chennai" },
-    { code: "TBM", name: "Tambaram", km: 27.2, lat: 12.9249, lng: 80.1478, loops: 8, division: "Chennai" },
-    { code: "CGL", name: "Chengalpattu Junction", km: 55.8, lat: 12.6841, lng: 79.9836, loops: 6, division: "Chennai" },
-    { code: "TMV", name: "Tindivanam", km: 121.4, lat: 12.2286, lng: 79.6508, loops: 4, division: "Tiruchirappalli" },
-    { code: "VM", name: "Villupuram Junction", km: 158.9, lat: 11.9401, lng: 79.4861, loops: 7, division: "Tiruchirappalli" },
-    { code: "VRI", name: "Vriddhachalam Junction", km: 213.4, lat: 11.5157, lng: 79.3243, loops: 5, division: "Tiruchirappalli" },
-    { code: "TPJ", name: "Tiruchirappalli Junction", km: 336.8, lat: 10.7905, lng: 78.6946, loops: 8, division: "Tiruchirappalli" },
-    { code: "DG", name: "Dindigul Junction", km: 431.1, lat: 10.3673, lng: 77.9803, loops: 5, division: "Madurai" },
-    { code: "MDU", name: "Madurai Junction", km: 493.3, lat: 9.9252, lng: 78.1198, loops: 7, division: "Madurai" },
-    { code: "VPT", name: "Virudhunagar Junction", km: 536.8, lat: 9.5872, lng: 77.9575, loops: 5, division: "Madurai" },
-    { code: "TEN", name: "Tirunelveli Junction", km: 650.2, lat: 8.7139, lng: 77.7567, loops: 6, division: "Madurai" },
-    { code: "CAPE", name: "Kanyakumari", km: 735.6, lat: 8.0883, lng: 77.5385, loops: 4, division: "Thiruvananthapuram" }
+  stations: [
+    { code: "MAS", name: "Puratchi Thalaivar Dr. M.G.R. Chennai Central", km: 0.0, lat: 13.08351, lng: 80.27543, loops: 12, division: "Chennai" },
+    { code: "AJJ", name: "Arakkonam Junction", km: 68.6, lat: 13.08137, lng: 79.66732, loops: 6, division: "Chennai" },
+    { code: "KPD", name: "Katpadi Junction (Vellore)", km: 129.6, lat: 12.97244, lng: 79.13460, loops: 6, division: "Chennai" },
+    { code: "JTJ", name: "Jolarpettai Junction", km: 214.1, lat: 12.55857, lng: 78.57753, loops: 8, division: "Chennai" },
+    { code: "MAP", name: "Morappur", km: 268.5, lat: 12.12308, lng: 78.39327, loops: 4, division: "Salem" },
+    { code: "SA", name: "Salem Junction", km: 334.2, lat: 11.66100, lng: 78.11729, loops: 6, division: "Salem" },
+    { code: "ED", name: "Erode Junction", km: 394.0, lat: 11.32769, lng: 77.72536, loops: 7, division: "Salem" },
+    { code: "TUP", name: "Tiruppur", km: 444.2, lat: 11.10911, lng: 77.34140, loops: 4, division: "Salem" },
+    { code: "CBE", name: "Coimbatore Junction", km: 494.4, lat: 11.00216, lng: 76.96367, loops: 6, division: "Salem" },
+    { code: "MS", name: "Chennai Egmore", km: 2.1, lat: 13.07822, lng: 80.26150, loops: 10, division: "Chennai" },
+    { code: "TBM", name: "Tambaram", km: 27.2, lat: 12.93662, lng: 80.13072, loops: 8, division: "Chennai" },
+    { code: "CGL", name: "Chengalpattu Junction", km: 55.8, lat: 12.68465, lng: 79.98483, loops: 6, division: "Chennai" },
+    { code: "TMV", name: "Tindivanam", km: 121.4, lat: 12.22848, lng: 79.65087, loops: 4, division: "Tiruchirappalli" },
+    { code: "VM", name: "Villupuram Junction", km: 158.9, lat: 11.93875, lng: 79.49987, loops: 7, division: "Tiruchirappalli" },
+    { code: "VRI", name: "Vriddhachalam Junction", km: 213.4, lat: 11.52158, lng: 79.31213, loops: 5, division: "Tiruchirappalli" },
+    { code: "TPJ", name: "Tiruchirappalli Junction", km: 336.8, lat: 10.79535, lng: 78.69568, loops: 8, division: "Tiruchirappalli" },
+    { code: "DG", name: "Dindigul Junction", km: 431.1, lat: 10.35585, lng: 77.98873, loops: 5, division: "Madurai" },
+    { code: "MDU", name: "Madurai Junction", km: 493.3, lat: 9.92769, lng: 78.11359, loops: 7, division: "Madurai" },
+    { code: "VPT", name: "Virudhunagar Junction", km: 536.8, lat: 9.58742, lng: 77.95889, loops: 5, division: "Madurai" },
+    { code: "TEN", name: "Tirunelveli Junction", km: 650.2, lat: 8.71243, lng: 77.72852, loops: 6, division: "Madurai" },
+    { code: "CAPE", name: "Kanyakumari", km: 735.6, lat: 8.08836, lng: 77.53826, loops: 4, division: "Thiruvananthapuram" }
   ],
 
   // Targeted Coordinated Block Segment (Katpadi - Jolarpettai, Tamil Nadu)

@@ -111,29 +111,33 @@ Synchronize Single Source of Truth Across All Views:
 
 ### Installation & Launch
 
-1. **Clone the repository:**
+1. **Clone & Install Dependencies:**
    ```bash
-   git clone https://github.com/polonium84r-ui/sih08.git
-   cd sih08
+   npm run install:all
    ```
 
-2. **Install dependencies (if any):**
+2. **Start Backend & Frontend Services:**
    ```bash
-   npm install
-   ```
+   # Terminal 1: Start Backend API (Port 5000)
+   npm run dev:backend
 
-3. **Start the RailFlow Server:**
-   ```bash
-   npm start
+   # Terminal 2: Start Frontend Dev Server (Port 3000)
+   npm run dev:frontend
    ```
-   *Access the web application at:* `http://localhost:3000`
+   *Access the web application at:* `http://localhost:3000`  
+   *API Swagger / Health Endpoint:* `http://localhost:5000/api/health`
 
-### Optional Environment Variables (`.env`)
-```env
-PORT=3000
-RAILRADAR_API_KEY=your_railradar_api_token_here
-```
-*(If no API key is provided, RailFlow automatically operates in Demo/Mock Mode using verified corridor timetables).*
+### Environment Configuration
+* **Backend (`backend/.env`):**
+  ```env
+  PORT=5000
+  RAILRADAR_API_KEY=your_railradar_api_token_here
+  CORS_ORIGIN=http://localhost:3000,http://localhost:5173
+  ```
+* **Frontend (`frontend/.env`):**
+  ```env
+  VITE_API_BASE_URL=http://localhost:5000/api/v1
+  ```
 
 ---
 
@@ -170,36 +174,109 @@ node scratch/verify_scenarios.js
 
 ---
 
-## 📁 Repository Structure
+## 🗄️ Database Architecture: PostgreSQL + Prisma ORM
+
+RailFlow uses **PostgreSQL 16** with **Prisma ORM** for enterprise-grade persistence, ACID transactions, and structured relational modeling:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 Frontend (Vite / ES Modules)                │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ HTTP / REST (/api/v1/*)
+┌──────────────────────────────▼──────────────────────────────┐
+│                Backend API Server (Express.js)              │
+│                                                             │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │       Unified Database Service Layer (db.js)          │  │
+│  │  - Proactive connectivity health check                │  │
+│  │  - Resilient zero-downtime In-Memory Fallback         │  │
+│  └───────────────┬───────────────────────┬───────────────┘  │
+└──────────────────┼───────────────────────┼──────────────────┘
+                   │ Connected             │ Disconnected
+                   ▼                       ▼
+┌──────────────────────────────────────┐  ┌───────────────────┐
+│     PostgreSQL Database (Prisma)     │  │  In-Memory Seed   │
+│  - Stations & TrackSections          │  │  (Zero-breakage   │
+│  - Requisitions & BlockDecisions     │  │   offline dev/CI) │
+│  - OperationalConfig & AuditLogs     │  └───────────────────┘
+└──────────────────────────────────────┘
+```
+
+### PostgreSQL Quick Start with Docker
+To launch PostgreSQL in the background:
+```bash
+# Start PostgreSQL 16 database container
+npm run db:up
+
+# Generate Prisma Client
+npm run db:generate
+
+# Seed the database with authentic Southern Railway data
+npm run db:seed
+
+# Stop PostgreSQL container
+npm run db:down
+```
+
+### Environment Configurations
+- **Backend (`backend/.env`)**:
+  ```env
+  PORT=5000
+  NODE_ENV=development
+  CORS_ORIGIN=http://localhost:3000,http://localhost:5173
+  DATABASE_URL="postgresql://postgres:postgres@localhost:5432/railflow_db?schema=public"
+  ```
+- **Frontend (`frontend/.env`)**:
+  ```env
+  VITE_API_BASE_URL=http://localhost:5000/api/v1
+  ```
+
+---
+
+## 📁 Repository Structure (Decoupled MVP Architecture)
 
 ```
 .
-├── index.html                           # Single-page interface (Operations, Block Planner, Coordination, Config)
-├── server.js                            # Node.js backend server with REST endpoints
-├── package.json                         # Project dependencies and npm start script
-├── README.md                            # Comprehensive project documentation
-├── css/
-│   ├── main.css                         # Core styling, tokens, and layout
-│   └── components.css                   # Component styles (tables, KPI cards, badges, modal dialogs)
-├── js/
-│   ├── app.js                           # Frontend controller, Leaflet maps, auto-schedule dispatch
-│   ├── corridor_data.js                 # Network stations, track topology, reference timetables & requisitions
-│   ├── conflict_engine.js               # Client-side spatial, temporal, and electrical conflict checks
-│   ├── cascade_simulator.js             # Delay cascade simulation model
-│   ├── recommender.js                   # Client recommendation candidate generator
-│   └── audit_logger.js                  # Audit logging system
-├── server/
-│   └── services/
-│       ├── railRadarService.js          # RailRadar API client with error & rate-limit handling
-│       ├── trainDataService.js          # Corridor train schedule discovery, worksite KM range validation
-│       ├── conflictDetectionService.js  # Train conflict detection, safety buffers, configurable caution orders
-│       └── blockOptimizationService.js # 24h continuous block search, deterministic ranking & alternative slots
-└── scratch/
-    ├── verify_unified_workflow.js       # 14-point end-to-end unified workflow verification test
-    ├── verify_block_optimizer.js        # Block Optimizer core logic test suite
-    ├── verify_corridor_sync.js          # Cross-corridor state isolation and line/block validation suite
-    ├── verify_operating_branch.js       # Operating Branch Timetable card synchronization suite
-    └── verify_scenarios.js              # 8 core railway operational scenarios suite
+├── docker-compose.yml                   # PostgreSQL 16 local service container
+├── package.json                         # Monorepo task runner (start, test, dev, db)
+│
+├── backend/                             # Express REST API Server
+│   ├── .env                             # Backend config (PORT=5000, DATABASE_URL)
+│   ├── package.json                     # Express, Prisma ORM, CORS, Dotenv
+│   ├── prisma/
+│   │   ├── schema.prisma                # Relational models (Station, Section, Requisition, etc.)
+│   │   └── seed.js                      # Southern Railway network & baseline seed script
+│   ├── src/
+│   │   ├── server.js                    # Express app bootstrap & db check
+│   │   ├── config/                      # Environment variables & operational defaults
+│   │   ├── routes/                      # Versioned REST endpoints (/api/v1/*)
+│   │   ├── controllers/                 # Domain request/response handlers
+│   │   ├── middleware/                  # Request validation, error handling, logging
+│   │   ├── services/
+│   │   │   ├── db.js                    # Unified Prisma DB service with fallback
+│   │   │   ├── blockOptimizationService.js # 24h continuous block search & ranking
+│   │   │   ├── conflictDetectionService.js # Safety buffers, caution orders, power block
+│   │   │   ├── trainDataService.js      # Corridor trains & worksite KM validation
+│   │   │   ├── railRadarService.js      # RailRadar real-time API client
+│   │   │   ├── auditLogService.js       # Form IR-OP-41 sanction memos & logs
+│   │   │   └── rulesEngine.js           # Pluggable railway rules & business logic
+│   │   └── data/                        # Corridor topology & station chainage
+│   └── tests/                           # Unit & integration test suites (23 tests)
+│
+├── frontend/                            # Vite Modern Web Client
+│   ├── .env                             # Frontend configuration (VITE_API_BASE_URL)
+│   ├── vite.config.js                   # Vite dev server & backend proxy config
+│   ├── package.json                     # Frontend dependencies & build scripts
+│   ├── index.html                       # Application interface template
+│   └── src/
+│       ├── main.js                      # Application bootstrap & lifecycle
+│       ├── api/                         # Backend API client
+│       ├── store/                       # Central reactive state store
+│       ├── modules/                     # Modular domain controllers (map, requisitions, planner, coordination, config)
+│       ├── data/                        # Track geometry & network definitions
+│       └── styles/                      # Modular CSS design system
+│
+└── scratch/                             # OSM track extraction tools & raw data
 ```
 
 ---

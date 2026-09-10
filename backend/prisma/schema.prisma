@@ -1,0 +1,114 @@
+// =========================================================================
+// RailFlow Database Schema (Prisma ORM & PostgreSQL)
+// Operational Decision Support System - Southern Railway (SR)
+// =========================================================================
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. Stations across Southern Railway Divisions
+model Station {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  km        Float
+  lat       Float
+  lng       Float
+  loops     Int      @default(4)
+  division  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([code])
+}
+
+// 2. Network Track Sections & Chainage
+model TrackSection {
+  id        String   @id
+  fromCode  String
+  toCode    String
+  lengthKm  Float
+  trackType String   @default("DOUBLE")
+  maxSpeed  Int      @default(130)
+  status    String   @default("CLEAR")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fromCode, toCode])
+}
+
+// 3. Departmental Maintenance Requisitions
+model Requisition {
+  id               String   @id // e.g. REQ-SR-CIVIL-104
+  department       String
+  deptCode         String
+  fromStation      String
+  toStation        String
+  sectionName      String?
+  trackLine        String   @default("UP Main Line")
+  blockType        String   @default("UP Line Block")
+  worksiteStartKm  Float
+  worksiteEndKm    Float
+  kmRange          String?
+  workType         String
+  workDesc         String
+  machinery        String?
+  durationMin      Int      @default(150)
+  urgency          String   @default("Due")
+  status           String   @default("SCHEDULED")
+  submittedBy      String?
+  submittedTime    String?
+  sanctionedSlot   String?
+  recommendedBlock String?
+  windowType       String?  @default("Preferred Window")
+  lat              Float?
+  lng              Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([fromStation, toStation])
+  @@index([status])
+}
+
+// 4. Optimizer Evaluation & Block Decisions Log
+model BlockDecision {
+  id                  Int      @id @default(autoincrement())
+  time                String?
+  reqId               String?
+  department          String?
+  corridor            String?
+  requestedWindow     String?
+  durationMin         Int?
+  selectedWindow      String?
+  conflictsConsidered String?
+  status              String?
+  dataSource          String?  @default("Demo/Mock Data")
+  createdAt           DateTime @default(now())
+
+  @@index([reqId])
+}
+
+// 5. Dynamic Operational Configuration
+model OperationalConfig {
+  id              Int      @id @default(1)
+  maxSpeedKmH     Int      @default(130)
+  headwayMinutes  Int      @default(12)
+  cautionSpeedKmH Int      @default(30)
+  updatedAt       DateTime @updatedAt
+}
+
+// 6. Security & Operational Audit Log
+model AuditLog {
+  id        String   @id // e.g. LOG-1001
+  timestamp String
+  user      String
+  action    String
+  details   String
+  createdAt DateTime @default(now())
+}

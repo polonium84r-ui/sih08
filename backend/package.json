@@ -1,0 +1,35 @@
+{
+  "name": "railflow-backend",
+  "version": "1.0.0",
+  "description": "RailFlow Enterprise Backend API - Southern Railway Decision Support System",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node tests/run_all_tests.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "node prisma/seed.js"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "keywords": [
+    "railflow",
+    "railways",
+    "decision-support",
+    "api",
+    "sih2026"
+  ],
+  "author": "Team CodeSmiths",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "6.4.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "prisma": "6.4.1"
+  }
+}

@@ -1531,15 +1531,26 @@
   margin-top: 1rem;
 }
 
-/* Map Pending Request Marker */
+/* Map Pending Request Marker - Never touch transform on the marker root to preserve Leaflet zoom/pan positioning */
 .custom-req-map-marker {
-  animation: pulseMarker 2s infinite ease-in-out;
+  background: transparent !important;
+  border: none !important;
 }
 
-@keyframes pulseMarker {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.15); opacity: 0.85; }
-  100% { transform: scale(1); opacity: 1; }
+.custom-req-map-marker .req-marker-inner {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+  animation: pulseMarkerGlow 2.5s infinite ease-in-out;
+}
+
+.custom-req-map-marker:hover .req-marker-inner {
+  transform: scale(1.15);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes pulseMarkerGlow {
+  0% { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); }
+  50% { box-shadow: 0 0 12px rgba(217, 119, 6, 0.65); }
+  100% { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); }
 }
 
 /* ==========================================================================

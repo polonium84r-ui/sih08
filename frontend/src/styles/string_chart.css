@@ -1,0 +1,261 @@
+/* ==========================================================================
+   RailFlow: Time-Distance String Chart (Marey Graph) Styles
+   ========================================================================== */
+
+.string-chart-container {
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 1.5rem;
+}
+
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.chart-title-area {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.chart-title-area h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.legend-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.line-swatch {
+  width: 18px;
+  height: 3px;
+  border-radius: 1px;
+}
+
+.line-swatch.vande-bharat { background: #00e5ff; box-shadow: 0 0 6px #00e5ff; }
+.line-swatch.express { background: #ffb300; }
+.line-swatch.passenger { background: #94a3b8; }
+.line-swatch.freight { background: #7c4dff; }
+.line-swatch.block-zone { 
+  background: rgba(255, 51, 102, 0.4); 
+  height: 10px; 
+  border: 1px dashed #ff3366; 
+}
+.line-swatch.coordinated-zone { 
+  background: rgba(0, 230, 118, 0.35); 
+  height: 10px; 
+  border: 1px solid #00e676; 
+}
+
+/* Marey Chart SVG Canvas */
+.chart-viewport {
+  width: 100%;
+  height: 520px;
+  background: #070b14;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+.chart-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Gridlines & Axes */
+.grid-line-x {
+  stroke: rgba(255, 255, 255, 0.04);
+  stroke-width: 1px;
+}
+
+.grid-line-x.hour-major {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1px;
+}
+
+.grid-line-y {
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 1px;
+}
+
+.axis-text-x {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--text-muted);
+  text-anchor: middle;
+}
+
+.axis-text-y {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--text-secondary);
+  text-anchor: end;
+}
+
+.axis-km-y {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  fill: var(--text-muted);
+  text-anchor: end;
+}
+
+/* Train Path Trajectories */
+.train-path {
+  fill: none;
+  stroke-width: 2.5px;
+  stroke-linecap: round;
+  transition: stroke-width var(--trans-fast), opacity var(--trans-fast);
+  cursor: pointer;
+}
+
+.train-path:hover {
+  stroke-width: 4.5px;
+  filter: drop-shadow(0 0 8px currentColor);
+}
+
+.train-path.vb {
+  stroke: #00e5ff !important;
+}
+
+.train-path.exp {
+  stroke: #f59e0b !important;
+}
+
+.train-path.pass {
+  stroke: #94a3b8 !important;
+  stroke-dasharray: 6 3;
+}
+
+.train-path.frt {
+  stroke: #8b5cf6 !important;
+}
+
+/* Delayed Trajectory (Calculated in Cascade Simulation) */
+.train-path-delayed {
+  fill: none;
+  stroke: #ff3366 !important;
+  stroke-width: 2.5px;
+  stroke-dasharray: 4 2;
+  opacity: 0.85;
+}
+
+/* Train Stop / Station Dwell Line (horizontal segment) */
+.train-dwell {
+  stroke-width: 3px;
+  stroke-linecap: square;
+}
+
+/* Maintenance Block Windows on String Chart */
+.chart-block-window {
+  rx: 4px;
+  cursor: grab;
+  transition: fill var(--trans-fast), stroke var(--trans-fast);
+}
+
+.chart-block-window:active {
+  cursor: grabbing;
+}
+
+.chart-block-window.uncoordinated {
+  fill: rgba(255, 51, 102, 0.22);
+  stroke: var(--accent-crimson);
+  stroke-width: 1.5px;
+  stroke-dasharray: 4 2;
+}
+
+.chart-block-window.coordinated {
+  fill: rgba(0, 230, 118, 0.25);
+  stroke: var(--accent-emerald);
+  stroke-width: 2px;
+}
+
+.chart-block-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* Regulation Points (Where trains get halted by block) */
+.regulation-point {
+  fill: var(--accent-crimson);
+  stroke: #ffffff;
+  stroke-width: 1.5px;
+  cursor: pointer;
+  animation: regPulse 2s infinite ease-in-out;
+}
+
+@keyframes regPulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px var(--accent-crimson)); }
+  50% { transform: scale(1.3); filter: drop-shadow(0 0 10px var(--accent-crimson)); }
+}
+
+/* Time Scrubber Line */
+.scrubber-line {
+  stroke: #ffffff;
+  stroke-width: 1.5px;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
+.scrubber-head {
+  fill: #ffffff;
+  stroke: var(--accent-cyan);
+  stroke-width: 2px;
+  cursor: ew-resize;
+}
+
+/* Chart Tooltip */
+.chart-tooltip {
+  position: absolute;
+  background: rgba(11, 17, 30, 0.95);
+  border: 1px solid var(--accent-cyan);
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+  z-index: 50;
+  display: none;
+  backdrop-filter: var(--glass-blur);
+}
+
+.chart-tooltip-title {
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--accent-cyan);
+  margin-bottom: 0.2rem;
+}
